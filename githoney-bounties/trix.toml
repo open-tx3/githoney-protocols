@@ -2,7 +2,7 @@
 name = "githoney-bounties"
 scope = "open-tx3"
 version = "0.1.0"
-description = "GitHoney bounties on Cardano — fund, assign, merge, and claim bounties for open-source contributions, backed by an on-chain settings registry and contributor badges"
+description = "Escrow-based bounties on Cardano for open-source contributions: fund, assign, merge, and claim"
 main = "main.tx3"
 readme = "README.md"
 logo = "logo.png"
