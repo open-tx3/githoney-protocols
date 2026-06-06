@@ -90,6 +90,29 @@ type SettingsRedeemer {
     CloseSettings,
 }
 
+// ------------------------------------------------------------------
+// Functions
+// ------------------------------------------------------------------
+
+// Build a verification-key credential from its key hash.
+fn vkey_credential(hash: Bytes) -> CardanoCredential {
+    CardanoCredential::VerificationKey {
+        VerificationKey: hash,
+    }
+}
+
+// Build an address from payment and stake key hashes (inline stake credential).
+fn vkey_address(payment_key: Bytes, stake_key: Bytes) -> CardanoAddress {
+    CardanoAddress {
+        payment_credential: vkey_credential(payment_key),
+        staking_credential: OptionalStakeCredential::Some {
+            stakeCredetial: StakeCredential::Inline {
+                VerificationKey: vkey_credential(stake_key),
+            },
+        },
+    }
+}
+
 // ==================================================================
 // Settings
 // ==================================================================
@@ -130,18 +153,7 @@ tx deploy(
         to: Vault,
         amount: publish_cost + AnyAsset(settings_policy_id, settings_token_name, 1),
         datum: SettingsDatum {
-            githoney_address: CardanoAddress {
-                payment_credential: CardanoCredential::VerificationKey {
-                    VerificationKey: githoney_payment_credential,
-                },
-                staking_credential: OptionalStakeCredential::Some {
-                    stakeCredetial: StakeCredential::Inline {
-                        VerificationKey: CardanoCredential::VerificationKey {
-                            VerificationKey: githoney_staking_credential,
-                        },
-                    },
-                },
-            },
+            githoney_address: vkey_address(githoney_payment_credential, githoney_staking_credential),
             bounty_creation_fee: creation_fee,
             bounty_reward_fee: reward_fee,
         },
@@ -196,18 +208,7 @@ tx update(
         to: Vault,
         amount: settings,
         datum: SettingsDatum {
-            githoney_address: CardanoAddress {
-                payment_credential: CardanoCredential::VerificationKey {
-                    VerificationKey: githoney_payment_key,
-                },
-                staking_credential: OptionalStakeCredential::Some {
-                    stakeCredetial: StakeCredential::Inline {
-                        VerificationKey: CardanoCredential::VerificationKey {
-                            VerificationKey: githoney_staking_key,
-                        },
-                    },
-                },
-            },
+            githoney_address: vkey_address(githoney_payment_key, githoney_staking_key),
             bounty_creation_fee: new_creation_fee,
             bounty_reward_fee: new_reward_fee,
         },

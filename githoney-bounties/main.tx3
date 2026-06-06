@@ -94,6 +94,29 @@ type BountyDatum {
     initial_value: Map<Bytes, Map<Bytes, Int>>,
 }
 
+// ------------------------------------------------------------------
+// Functions
+// ------------------------------------------------------------------
+
+// Build a verification-key credential from its key hash.
+fn vkey_credential(hash: Bytes) -> CardanoCredential {
+    CardanoCredential::VerificationKey {
+        VerificationKey: hash,
+    }
+}
+
+// Build an address from payment and stake key hashes (inline stake credential).
+fn vkey_address(payment_key: Bytes, stake_key: Bytes) -> CardanoAddress {
+    CardanoAddress {
+        payment_credential: vkey_credential(payment_key),
+        staking_credential: OptionalStakeCredential::Some {
+            stakeCredetial: StakeCredential::Inline {
+                VerificationKey: vkey_credential(stake_key),
+            },
+        },
+    }
+}
+
 /// Create a bounty whose reward is a native token, minting the bounty NFT and
 /// paying the creation fee to GitHoney.
 tx create_bounty_with_token(
@@ -143,21 +166,8 @@ tx create_bounty_with_token(
         to: Vault,
         amount: Ada(min_ada) + AnyAsset(bounty_policy_id, bounty_id, 1) + AnyAsset(reward_policy_id, reward_asset_name, reward_amount),
         datum: BountyDatum {
-            admin_payment_credential: CardanoCredential::VerificationKey {
-                VerificationKey: admin_payment_key,
-            },
-            maintainer_address:  CardanoAddress {
-                payment_credential: CardanoCredential::VerificationKey {
-                    VerificationKey: maintainer_payment_key,
-                },
-                staking_credential: OptionalStakeCredential::Some {
-                    stakeCredetial: StakeCredential::Inline {
-                        VerificationKey: CardanoCredential::VerificationKey {
-                            VerificationKey: maintainer_stake_key,
-                        },
-                    },
-                },
-            },
+            admin_payment_credential: vkey_credential(admin_payment_key),
+            maintainer_address:  vkey_address(maintainer_payment_key, maintainer_stake_key),
             contributor_address: OptionalAddress::None {},
             bounty_reward_fee: settings.bounty_reward_fee,
             deadline: time_limit,
@@ -233,21 +243,8 @@ tx create_bounty_with_lovelace(
         to: Vault,
         amount: Ada(min_ada + reward_amount) + AnyAsset(bounty_policy_id, bounty_id, 1),
         datum: BountyDatum {
-            admin_payment_credential: CardanoCredential::VerificationKey {
-                VerificationKey: admin_payment_key,
-            },
-            maintainer_address: CardanoAddress {
-                payment_credential: CardanoCredential::VerificationKey {
-                    VerificationKey: maintainer_payment_key,
-                },
-                staking_credential: OptionalStakeCredential::Some {
-                    stakeCredetial: StakeCredential::Inline {
-                        VerificationKey: CardanoCredential::VerificationKey {
-                            VerificationKey: maintainer_stake_key,
-                        },
-                    },
-                },
-            },
+            admin_payment_credential: vkey_credential(admin_payment_key),
+            maintainer_address: vkey_address(maintainer_payment_key, maintainer_stake_key),
             contributor_address: OptionalAddress::None {},
             bounty_reward_fee: settings.bounty_reward_fee,
             deadline: time_limit,
@@ -399,18 +396,7 @@ tx assign_bounty(
             admin_payment_credential: bounty.admin_payment_credential,
             maintainer_address: bounty.maintainer_address,
             contributor_address: OptionalAddress::Some {
-                address: CardanoAddress {
-                    payment_credential: CardanoCredential::VerificationKey {
-                        VerificationKey: contributor_payment_credential,
-                    },
-                    staking_credential: OptionalStakeCredential::Some {
-                        stakeCredetial: StakeCredential::Inline {
-                            VerificationKey: CardanoCredential::VerificationKey {
-                                VerificationKey: contributor_stake_credential,
-                            },
-                        },
-                    },
-                },
+                address: vkey_address(contributor_payment_credential, contributor_stake_credential),
             },
             bounty_reward_fee: bounty.bounty_reward_fee,
             deadline: bounty.deadline,
@@ -484,18 +470,7 @@ tx assign_bug_bounty(
             admin_payment_credential: bounty.admin_payment_credential,
             maintainer_address: bounty.maintainer_address,
             contributor_address: OptionalAddress::Some {
-                address: CardanoAddress {
-                    payment_credential: CardanoCredential::VerificationKey {
-                        VerificationKey: contributor_payment_credential,
-                    },
-                    staking_credential: OptionalStakeCredential::Some {
-                        stakeCredetial: StakeCredential::Inline {
-                            VerificationKey: CardanoCredential::VerificationKey {
-                                VerificationKey: contributor_stake_credential,
-                            },
-                        },
-                    },
-                },
+                address: vkey_address(contributor_payment_credential, contributor_stake_credential),
             },
             bounty_reward_fee: bounty.bounty_reward_fee,
             deadline: bounty.deadline,
