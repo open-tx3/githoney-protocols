@@ -112,7 +112,7 @@ tx deploy(
         publish_cost: Ada(50000000),
     }
 
-    input one_shot_utxo {
+    input seed {
         ref: utxo_ref,
     }
 
@@ -126,7 +126,7 @@ tx deploy(
         redeemer: (),
     }
 
-    cardano::publish settings_utxo {
+    cardano::publish settings {
         to: Vault,
         amount: publish_cost + AnyAsset(settings_policy_id, settings_token_name, 1),
         datum: SettingsDatum {
@@ -151,7 +151,7 @@ tx deploy(
 
     output change {
         to: GitHoney,
-        amount: one_shot_utxo - fees - publish_cost,
+        amount: seed - fees - publish_cost,
     }
 
     cardano::plutus_witness {
@@ -180,21 +180,21 @@ tx update(
         min_amount: Ada(20000000),
     }
 
-    input current {
+    input settings {
         from: Vault,
         min_amount: AnyAsset(settings_policy_id, settings_token_name,1),
         datum_is: SettingsDatum,
         redeemer: SettingsRedeemers::UpdateSettings {},
     }
 
-    input githoney_wallet {
+    input funds {
         from: GitHoney,
         min_amount: min_utxo(change) + fees,
     }
 
-    cardano::publish settings_utxo {
+    cardano::publish updated_settings {
         to: Vault,
-        amount: current,
+        amount: settings,
         datum: SettingsDatum {
             githoney_address: CardanoAddress {
                 payment_credential: CardanoCredential::VerificationKey {
@@ -217,7 +217,7 @@ tx update(
 
     output change {
         to: GitHoney,
-        amount: githoney_wallet - fees,
+        amount: funds - fees,
     }
 
     signers {
@@ -244,12 +244,12 @@ tx close(
         min_amount: Ada(20000000),
     }
 
-    input githoney_wallet {
+    input funds {
         from: GitHoney,
         min_amount: min_utxo(change) + fees,
     }
 
-    input current {
+    input settings {
         from: Vault,
         min_amount: AnyAsset(settings_policy_id, settings_token_name, 1),
         datum_is: SettingsDatum,
@@ -263,7 +263,7 @@ tx close(
 
     output change {
         to: GitHoney,
-        amount: githoney_wallet - fees + Ada(remaining_ada),
+        amount: funds - fees + Ada(remaining_ada),
     }
 
     signers {

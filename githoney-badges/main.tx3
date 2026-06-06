@@ -80,7 +80,7 @@ tx mint_badge(
         min_amount: Ada(20000000),
     }
 
-    input githoney_wallet {
+    input funds {
         ref: utxo_ref,
     }
 
@@ -89,9 +89,9 @@ tx mint_badge(
         redeemer: (),
     }
 
-    output badge_utxo {
+    output new_badge {
         to: Registry,
-        amount: min_utxo(badge_utxo) + AnyAsset(badge_policy_id, ref_nft_asset_name, 1),
+        amount: min_utxo(new_badge) + AnyAsset(badge_policy_id, ref_nft_asset_name, 1),
         datum: BadgesDatum {
             metadata: {
                 name: name_value,
@@ -102,14 +102,14 @@ tx mint_badge(
         },
     }
 
-    output ft_output {
+    output tokens {
         to: Distributor,
-        amount: AnyAsset(badge_policy_id, ft_badge_name, ft_badge_amount) + min_utxo(ft_output),
+        amount: AnyAsset(badge_policy_id, ft_badge_name, ft_badge_amount) + min_utxo(tokens),
     }
 
     output change {
         to: GitHoney,
-        amount: githoney_wallet - fees - min_utxo(ft_output) - min_utxo(badge_utxo),
+        amount: funds - fees - min_utxo(tokens) - min_utxo(new_badge),
     }
 
     cardano::plutus_witness {
@@ -146,23 +146,23 @@ tx update_badge(
         min_amount: Ada(20000000),
     }
 
-    input githoney_wallet {
+    input funds {
         from: GitHoney,
         min_amount: Ada(2000000),
     }
 
-    reference settings_utxo {
+    reference settings {
         ref: settings_ref,
     }
 
-    input current {
+    input badge {
         ref: badge_utxo_ref,
         redeemer: (),
     }
 
-    output badge_utxo {
+    output updated_badge {
         to: Registry,
-        amount: current,
+        amount: badge,
         datum: BadgesDatum {
             metadata: {
                 name: name_value,
@@ -175,7 +175,7 @@ tx update_badge(
 
     output change {
         to: GitHoney,
-        amount: githoney_wallet - fees,
+        amount: funds - fees,
     }
 
 
@@ -200,12 +200,12 @@ tx pay_badges_to(
     /// Policy id of the badge token to transfer.
     badge_policy: Bytes
 ) {
-    input badges {
+    input tokens {
         from: Distributor,
         min_amount: AnyAsset(badge_policy, badge_name, 1),
     }
 
-    input gas {
+    input funds {
         from: Distributor,
         min_amount: fees + min_utxo(payment) + min_utxo(change),
     }
@@ -217,7 +217,7 @@ tx pay_badges_to(
 
     output change {
         to: Distributor,
-        amount: gas + badges - fees - min_utxo(payment) - AnyAsset(badge_policy, badge_name, 1),
+        amount: funds + tokens - fees - min_utxo(payment) - AnyAsset(badge_policy, badge_name, 1),
     }
 }
 
@@ -231,23 +231,23 @@ tx collect_badge_utxos(
         min_amount: Ada(5000000),
     }
 
-    reference settings_utxo {
+    reference settings {
         ref: settings_ref,
     }
 
-    input current {
+    input stray {
         ref: utxo_to_collect,
         redeemer: (),
     }
 
-    input githoney_wallet {
+    input funds {
         from: GitHoney,
         min_amount: fees,
     }
 
     output change {
         to: GitHoney,
-        amount: githoney_wallet + current - fees,
+        amount: funds + stray - fees,
     }
 
     signers {

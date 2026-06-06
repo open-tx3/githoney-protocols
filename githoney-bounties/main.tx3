@@ -1,7 +1,3 @@
-// ------------------------------------------------------------------
-// Parties
-// ------------------------------------------------------------------
-
 /// Repository owner who creates and funds a bounty, and recovers funds if it is closed unassigned.
 party Maintainer;
 /// Developer assigned to a bounty who claims the reward once the work is merged.
@@ -16,16 +12,6 @@ party GitHoney;
 /// Third party that tops up an existing bounty's reward via `add_bounty_rewards`.
 party Sponsor;
 
-// ------------------------------------------------------------------
-// Environment
-// ------------------------------------------------------------------
-// The deployed GitHoney environment this protocol operates against, selected
-// per network via the active profile's `.env.<profile>` file. The settings
-// UTxO is published by the `githoney-setup` protocol; the fee schedule is read
-// from its datum at resolve time (see the `contract` reference in the create
-// transactions), so it is not duplicated here. Per-call values (bounty id,
-// reward asset, maintainer/contributor keys, validity window, min-ADA) stay tx
-// parameters.
 env {
     /// Published GitHoney settings UTxO, referenced by every bounty transaction.
     settings_ref: UtxoRef,
@@ -36,10 +22,6 @@ env {
     /// Minting policy id of the bounty NFT.
     bounty_policy_id: Bytes,
 }
-
-// ------------------------------------------------------------------
-// Types
-// ------------------------------------------------------------------
 
 // A full Cardano address: payment credential plus optional staking credential.
 type CardanoAddress {
@@ -112,10 +94,6 @@ type GithoneyDatum {
     initial_value: Map<Bytes, Map<Bytes, Int>>,
 }
 
-// ==================================================================
-// Bounties
-// ==================================================================
-
 /// Create a bounty whose reward is a native token, minting the bounty NFT and
 /// paying the creation fee to GitHoney.
 tx create_bounty_with_token(
@@ -141,7 +119,7 @@ tx create_bounty_with_token(
     /// Validity-window upper bound (slot).
     until: Int,
 ) {
-    reference contract {
+    reference settings {
         ref: settings_ref,
         datum_is: SettingsDatum,
     }
@@ -151,9 +129,9 @@ tx create_bounty_with_token(
         min_amount: Ada(5000000),
     }
 
-    input maintainer_input {
+    input funds {
         from: Maintainer,
-        min_amount: min_utxo(bounty_utxo) + min_utxo(maintainer_output) + AnyAsset(reward_policy_id, reward_asset_name, reward_amount) + Ada(contract.bounty_creation_fee) + fees,
+        min_amount: min_utxo(new_bounty) + min_utxo(change) + AnyAsset(reward_policy_id, reward_asset_name, reward_amount) + Ada(settings.bounty_creation_fee) + fees,
     }
 
     mint {
@@ -161,7 +139,7 @@ tx create_bounty_with_token(
         redeemer: (),
     }
 
-    output bounty_utxo {
+    output new_bounty {
         to: Vault,
         amount: Ada(min_ada) + AnyAsset(bounty_policy_id, bounty_id, 1) + AnyAsset(reward_policy_id, reward_asset_name, reward_amount),
         datum: GithoneyDatum {
@@ -181,7 +159,7 @@ tx create_bounty_with_token(
                 },
             },
             contributor_address: OptionAddress::None {},
-            bounty_reward_fee: contract.bounty_reward_fee,
+            bounty_reward_fee: settings.bounty_reward_fee,
             deadline: time_limit,
             merged: false,
             initial_value: {
@@ -195,14 +173,14 @@ tx create_bounty_with_token(
         },
     }
 
-    output githoney_wallet{
+    output fee{
         to: GitHoney,
-        amount: Ada(contract.bounty_creation_fee),
+        amount: Ada(settings.bounty_creation_fee),
     }
 
-    output maintainer_output {
+    output change {
         to: Maintainer,
-        amount: maintainer_input - Ada(contract.bounty_creation_fee) - fees - AnyAsset(reward_policy_id, reward_asset_name, reward_amount) - Ada(min_ada),
+        amount: funds - Ada(settings.bounty_creation_fee) - fees - AnyAsset(reward_policy_id, reward_asset_name, reward_amount) - Ada(min_ada),
     }
 
     validity {
@@ -231,7 +209,7 @@ tx create_bounty_with_lovelace(
     /// Validity-window upper bound (slot).
     until: Int,
 ) {
-    reference contract {
+    reference settings {
         ref: settings_ref,
         datum_is: SettingsDatum,
     }
@@ -241,9 +219,9 @@ tx create_bounty_with_lovelace(
         min_amount: Ada(5000000),
     }
 
-    input maintainer_input {
+    input funds {
         from: Maintainer,
-        min_amount: min_utxo(bounty_utxo) + min_utxo(maintainer_output) + Ada(contract.bounty_creation_fee + reward_amount) + fees,
+        min_amount: min_utxo(new_bounty) + min_utxo(change) + Ada(settings.bounty_creation_fee + reward_amount) + fees,
     }
 
     mint {
@@ -251,7 +229,7 @@ tx create_bounty_with_lovelace(
         redeemer: (),
     }
 
-    output bounty_utxo {
+    output new_bounty {
         to: Vault,
         amount: Ada(min_ada + reward_amount) + AnyAsset(bounty_policy_id, bounty_id, 1),
         datum: GithoneyDatum {
@@ -271,7 +249,7 @@ tx create_bounty_with_lovelace(
                 },
             },
             contributor_address: OptionAddress::None {},
-            bounty_reward_fee: contract.bounty_reward_fee,
+            bounty_reward_fee: settings.bounty_reward_fee,
             deadline: time_limit,
             merged: false,
             initial_value: {
@@ -282,14 +260,14 @@ tx create_bounty_with_lovelace(
         },
     }
 
-    output githoney_wallet{
+    output fee{
         to: GitHoney,
-        amount: Ada(contract.bounty_creation_fee),
+        amount: Ada(settings.bounty_creation_fee),
     }
 
-    output maintainer_output {
+    output change {
         to: Maintainer,
-        amount: maintainer_input - Ada(contract.bounty_creation_fee + reward_amount + min_ada) - fees,
+        amount: funds - Ada(settings.bounty_creation_fee + reward_amount + min_ada) - fees,
     }
 
     validity {
@@ -321,7 +299,7 @@ tx add_bounty_rewards(
     /// Validity-window upper bound (slot).
     until: Int,
 ) {
-    reference contract {
+    reference settings {
         ref: settings_ref,
         datum_is: SettingsDatum,
     }
@@ -331,27 +309,27 @@ tx add_bounty_rewards(
         min_amount: Ada(5000000),
     }
 
-    input sponsor_input {
+    input funds {
         from: Sponsor,
-        min_amount: min_utxo(sponsor_output) + AnyAsset(reward_policy_id, reward_asset_name, reward_amount) + fees,
+        min_amount: min_utxo(change) + AnyAsset(reward_policy_id, reward_asset_name, reward_amount) + fees,
     }
 
-    input current {
+    input bounty {
         ref: bounty_ref,
         datum_is: GithoneyDatum,
         redeemer: GithoneyContractRedeemers::AddRewards {},
     }
 
-    output bounty_utxo {
+    output updated_bounty {
         to: Vault,
-        amount: current + AnyAsset(reward_policy_id, reward_asset_name, reward_amount),
+        amount: bounty + AnyAsset(reward_policy_id, reward_asset_name, reward_amount),
         datum: GithoneyDatum {
-            admin_payment_credential: current.admin_payment_credential,
-            maintainer_address: current.maintainer_address,
-            contributor_address: current.contributor_address,
-            bounty_reward_fee: current.bounty_reward_fee,
-            deadline: current.deadline,
-            merged: current.merged,
+            admin_payment_credential: bounty.admin_payment_credential,
+            maintainer_address: bounty.maintainer_address,
+            contributor_address: bounty.contributor_address,
+            bounty_reward_fee: bounty.bounty_reward_fee,
+            deadline: bounty.deadline,
+            merged: bounty.merged,
             initial_value: {
                 "": {
                     "": initial_rewards,
@@ -360,9 +338,9 @@ tx add_bounty_rewards(
         },
     }
 
-    output sponsor_output {
+    output change {
         to: Sponsor,
-        amount: sponsor_input - fees - AnyAsset(reward_policy_id, reward_asset_name, reward_amount),
+        amount: funds - fees - AnyAsset(reward_policy_id, reward_asset_name, reward_amount),
     }
 
     validity {
@@ -393,7 +371,7 @@ tx assign_bounty(
     /// Validity-window upper bound (slot).
     until: Int,
 ) {
-    reference contract {
+    reference settings {
         ref: settings_ref,
         datum_is: SettingsDatum,
     }
@@ -403,23 +381,23 @@ tx assign_bounty(
         min_amount: Ada(5000000),
     }
 
-    input contributor_input {
+    input funds {
         from: Contributor,
-        min_amount: min_utxo(contributor_output) + Ada(min_ada) + fees,
+        min_amount: min_utxo(change) + Ada(min_ada) + fees,
     }
 
-    input current {
+    input bounty {
         ref: bounty_ref,
         datum_is: GithoneyDatum,
         redeemer: GithoneyContractRedeemers::Assign {},
     }
 
-    output bounty_utxo {
+    output updated_bounty {
         to: Vault,
-        amount: current + Ada(min_ada), // 2 * minAda
+        amount: bounty + Ada(min_ada), // 2 * minAda
         datum: GithoneyDatum {
-            admin_payment_credential: current.admin_payment_credential,
-            maintainer_address: current.maintainer_address,
+            admin_payment_credential: bounty.admin_payment_credential,
+            maintainer_address: bounty.maintainer_address,
             contributor_address: OptionAddress::Some {
                 address: CardanoAddress {
                     payment_credential: CardanoCredential::VerificationKey {
@@ -434,9 +412,9 @@ tx assign_bounty(
                     },
                 },
             },
-            bounty_reward_fee: current.bounty_reward_fee,
-            deadline: current.deadline,
-            merged: current.merged,
+            bounty_reward_fee: bounty.bounty_reward_fee,
+            deadline: bounty.deadline,
+            merged: bounty.merged,
             initial_value: {
                 "": {
                     "": initial_funds,
@@ -445,9 +423,9 @@ tx assign_bounty(
         },
     }
 
-    output contributor_output {
+    output change {
         to: Contributor,
-        amount: contributor_input - fees - Ada(min_ada),
+        amount: funds - fees - Ada(min_ada),
     }
 
     validity {
@@ -478,7 +456,7 @@ tx assign_bug_bounty(
     /// Validity-window upper bound (slot).
     until: Int,
 ) {
-    reference contract {
+    reference settings {
         ref: settings_ref,
         datum_is: SettingsDatum,
     }
@@ -488,23 +466,23 @@ tx assign_bug_bounty(
         min_amount: Ada(5000000),
     }
 
-    input maintainer_input {
+    input funds {
         from: Maintainer,
-        min_amount: min_utxo(maintainer_output) + Ada(min_ada) + fees,
+        min_amount: min_utxo(change) + Ada(min_ada) + fees,
     }
 
-    input current {
+    input bounty {
         ref: bounty_ref,
         datum_is: GithoneyDatum,
         redeemer: GithoneyContractRedeemers::Assign {},
     }
 
-    output bounty_utxo {
+    output updated_bounty {
         to: Vault,
-        amount: current + Ada(min_ada),
+        amount: bounty + Ada(min_ada),
         datum: GithoneyDatum {
-            admin_payment_credential: current.admin_payment_credential,
-            maintainer_address: current.maintainer_address,
+            admin_payment_credential: bounty.admin_payment_credential,
+            maintainer_address: bounty.maintainer_address,
             contributor_address: OptionAddress::Some {
                 address: CardanoAddress {
                     payment_credential: CardanoCredential::VerificationKey {
@@ -519,9 +497,9 @@ tx assign_bug_bounty(
                     },
                 },
             },
-            bounty_reward_fee: current.bounty_reward_fee,
-            deadline: current.deadline,
-            merged: current.merged,
+            bounty_reward_fee: bounty.bounty_reward_fee,
+            deadline: bounty.deadline,
+            merged: bounty.merged,
             initial_value: {
                 "": {
                     "": initial_funds,
@@ -530,9 +508,9 @@ tx assign_bug_bounty(
         },
     }
 
-    output maintainer_output {
+    output change {
         to: Maintainer,
-        amount: maintainer_input - fees - Ada(min_ada),
+        amount: funds - fees - Ada(min_ada),
     }
 
     validity {
@@ -566,7 +544,7 @@ tx close_bounty_unassigned(
     /// Validity-window upper bound (slot).
     until: Int,
 ) {
-    reference contract {
+    reference settings {
         ref: settings_ref,
         datum_is: SettingsDatum,
     }
@@ -576,12 +554,12 @@ tx close_bounty_unassigned(
         min_amount: Ada(5000000),
     }
 
-    input admin_input {
+    input funds {
         from: Admin,
-        min_amount: min_utxo(admin_output) + min_utxo(maintainer_output) + fees,
+        min_amount: min_utxo(change) + min_utxo(reward) + fees,
     }
 
-    input current {
+    input bounty {
         ref: bounty_ref,
         datum_is: GithoneyDatum,
         redeemer: GithoneyContractRedeemers::Close {},
@@ -592,14 +570,14 @@ tx close_bounty_unassigned(
         redeemer: (),
     }
 
-    output maintainer_output {
+    output reward {
         to: Maintainer,
         amount: Ada(min_ada) + AnyAsset(reward_policy_id, reward_asset_name, reward_amount),
     }
 
-    output admin_output {
+    output change {
         to: Admin,
-        amount: admin_input - fees,
+        amount: funds - fees,
     }
 
     validity {
@@ -644,7 +622,7 @@ tx close_bounty_unassigned_sponsored(
     /// Validity-window upper bound (slot).
     until: Int,
 ) {
-    reference contract {
+    reference settings {
         ref: settings_ref,
         datum_is: SettingsDatum,
     }
@@ -654,12 +632,12 @@ tx close_bounty_unassigned_sponsored(
         min_amount: Ada(5000000),
     }
 
-    input admin_input {
+    input funds {
         from: Admin,
-        min_amount: min_utxo(admin_output) + min_utxo(maintainer_output) + min_utxo(sponsor_output) + fees,
+        min_amount: min_utxo(change) + min_utxo(reward) + min_utxo(refund) + fees,
     }
 
-    input current {
+    input bounty {
         ref: bounty_ref,
         datum_is: GithoneyDatum,
         redeemer: GithoneyContractRedeemers::Close {},
@@ -670,19 +648,19 @@ tx close_bounty_unassigned_sponsored(
         redeemer: (),
     }
 
-    output maintainer_output {
+    output reward {
         to: Maintainer,
         amount: Ada(min_ada) + AnyAsset(reward_policy_id, reward_asset_name, reward_amount),
     }
 
-    output admin_output {
+    output change {
         to: Admin,
-        amount: admin_input - fees - min_utxo(sponsor_output),
+        amount: funds - fees - min_utxo(refund),
     }
 
-    output sponsor_output {
+    output refund {
         to: Sponsor,
-        amount: AnyAsset(refundings_policy_id, refundings_asset_name, refundings_amount) + min_utxo(sponsor_output),
+        amount: AnyAsset(refundings_policy_id, refundings_asset_name, refundings_amount) + min_utxo(refund),
     }
 
     validity {
@@ -722,7 +700,7 @@ tx close_bounty_assigned(
     until: Int,
 
 ) {
-    reference contract {
+    reference settings {
         ref: settings_ref,
         datum_is: SettingsDatum,
     }
@@ -732,12 +710,12 @@ tx close_bounty_assigned(
         min_amount: Ada(5000000),
     }
 
-    input admin_input {
+    input funds {
         from: Admin,
-        min_amount: min_utxo(admin_output) + min_utxo(maintainer_output) + fees,
+        min_amount: min_utxo(change) + min_utxo(reward) + fees,
     }
 
-    input current {
+    input bounty {
         ref: bounty_ref,
         datum_is: GithoneyDatum,
         redeemer: GithoneyContractRedeemers::Close {},
@@ -748,19 +726,19 @@ tx close_bounty_assigned(
         redeemer: (),
     }
 
-    output maintainer_output {
+    output reward {
         to: Maintainer,
         amount: Ada(min_ada) + AnyAsset(reward_policy_id, reward_asset_name, reward_amount),
     }
 
-    output contributor_output {
+    output deposit {
         to: Contributor,
         amount: Ada(min_ada),
     }
 
-    output admin_output {
+    output change {
         to: Admin,
-        amount: admin_input - fees,
+        amount: funds - fees,
     }
 
     validity {
@@ -806,7 +784,7 @@ tx close_bounty_assigned_sponsored(
     /// Validity-window upper bound (slot).
     until: Int,
 ) {
-    reference contract {
+    reference settings {
         ref: settings_ref,
         datum_is: SettingsDatum,
     }
@@ -816,12 +794,12 @@ tx close_bounty_assigned_sponsored(
         min_amount: Ada(5000000),
     }
 
-    input admin_input {
+    input funds {
         from: Admin,
-        min_amount: min_utxo(admin_output) + min_utxo(maintainer_output) + min_utxo(sponsor_output) + fees,
+        min_amount: min_utxo(change) + min_utxo(reward) + min_utxo(refund) + fees,
     }
 
-    input current {
+    input bounty {
         ref: bounty_ref,
         datum_is: GithoneyDatum,
         redeemer: GithoneyContractRedeemers::Close {},
@@ -832,24 +810,24 @@ tx close_bounty_assigned_sponsored(
         redeemer: (),
     }
 
-    output maintainer_output {
+    output reward {
         to: Maintainer,
         amount: Ada(min_ada) + AnyAsset(reward_policy_id, reward_asset_name, reward_amount),
     }
 
-    output contributor_output {
+    output deposit {
         to: Contributor,
         amount: Ada(min_ada),
     }
 
-    output admin_output {
+    output change {
         to: Admin,
-        amount: admin_input - fees - min_utxo(sponsor_output),
+        amount: funds - fees - min_utxo(refund),
     }
 
-    output sponsor_output {
+    output refund {
         to: Sponsor,
-        amount: AnyAsset(refundings_policy_id, refundings_asset_name, refundings_amount) + min_utxo(sponsor_output),
+        amount: AnyAsset(refundings_policy_id, refundings_asset_name, refundings_amount) + min_utxo(refund),
     }
 
     validity {
@@ -888,7 +866,7 @@ tx merge_bounty(
     /// Validity-window upper bound (slot).
     until: Int,
 ) {
-    reference contract {
+    reference settings {
         ref: settings_ref,
         datum_is: SettingsDatum,
     }
@@ -898,27 +876,27 @@ tx merge_bounty(
         min_amount: Ada(5000000),
     }
 
-    input admin_input {
+    input funds {
         from: Admin,
-        min_amount: min_utxo(githoney_output) + fees + min_utxo(admin_output),
+        min_amount: min_utxo(fee) + fees + min_utxo(change),
     }
 
-    input current {
+    input bounty {
         ref: bounty_ref,
         datum_is: GithoneyDatum,
         redeemer: GithoneyContractRedeemers::Merge {},
     }
 
 
-    output bounty_utxo {
+    output updated_bounty {
         to: Vault,
-        amount: current - AnyAsset(reward_policy_id, reward_asset_name, githoney_fee) - Ada(min_ada),
+        amount: bounty - AnyAsset(reward_policy_id, reward_asset_name, githoney_fee) - Ada(min_ada),
         datum: GithoneyDatum {
-            admin_payment_credential: current.admin_payment_credential,
-            maintainer_address: current.maintainer_address,
-            contributor_address: current.contributor_address,
-            bounty_reward_fee: current.bounty_reward_fee,
-            deadline: current.deadline,
+            admin_payment_credential: bounty.admin_payment_credential,
+            maintainer_address: bounty.maintainer_address,
+            contributor_address: bounty.contributor_address,
+            bounty_reward_fee: bounty.bounty_reward_fee,
+            deadline: bounty.deadline,
             merged: true,
             initial_value: {
                 "": {
@@ -928,20 +906,20 @@ tx merge_bounty(
         },
     }
 
-    output githoney_output {
+    output fee {
         to: GitHoney,
-        amount: AnyAsset(reward_policy_id, reward_asset_name, githoney_fee) + min_utxo(githoney_output),
+        amount: AnyAsset(reward_policy_id, reward_asset_name, githoney_fee) + min_utxo(fee),
     }
 
-    output maintainer_output {
+    output deposit {
         to: Maintainer,
         amount: Ada(min_ada),
     }
 
-    output admin_output {
+    output change {
         to: Admin,
-        // NOTE: admin pays the min ada to create the githoney output (1168010 lovelace)
-        amount: admin_input - fees - min_utxo(githoney_output),
+        // NOTE: admin pays the min ada to create the fee output (1168010 lovelace)
+        amount: funds - fees - min_utxo(fee),
     }
 
     validity {
@@ -971,7 +949,7 @@ tx claim_bounty(
     /// Validity-window upper bound (slot).
     until: Int,
 ) {
-    reference contract {
+    reference settings {
         ref: settings_ref,
         datum_is: SettingsDatum,
     }
@@ -981,12 +959,12 @@ tx claim_bounty(
         min_amount: Ada(5000000),
     }
 
-    input contributor_input {
+    input funds {
         from: Contributor,
-        min_amount: min_utxo(contributor_output) + fees,
+        min_amount: min_utxo(reward) + fees,
     }
 
-    input current {
+    input bounty {
         ref: bounty_ref,
         datum_is: GithoneyDatum,
         redeemer: GithoneyContractRedeemers::Claim {},
@@ -997,9 +975,9 @@ tx claim_bounty(
         redeemer: (),
     }
 
-    output contributor_output {
+    output reward {
         to: Contributor,
-        amount: contributor_input + current - AnyAsset(bounty_policy_id, bounty_id, 1) - fees,
+        amount: funds + bounty - AnyAsset(bounty_policy_id, bounty_id, 1) - fees,
     }
 
     validity {
