@@ -40,7 +40,7 @@ env {
 // ------------------------------------------------------------------
 
 // CIP-68 reference datum of a badge: on-chain metadata map and version.
-type BadgesDatum {
+type BadgeDatum {
     metadata: Map<Bytes, Bytes>,
     version: Int,
 }
@@ -64,7 +64,7 @@ tx mint_badge(
     logo: Bytes,
     /// Metadata value stored under the "logo" key.
     logo_value: Bytes,
-    /// Badge metadata version written into the `BadgesDatum`.
+    /// Badge metadata version written into the `BadgeDatum`.
     m_version: Int,
     /// Metadata key bytes for the "name" entry.
     name: Bytes,
@@ -92,7 +92,7 @@ tx mint_badge(
     output new_badge {
         to: Registry,
         amount: min_utxo(new_badge) + AnyAsset(badge_policy_id, ref_nft_asset_name, 1),
-        datum: BadgesDatum {
+        datum: BadgeDatum {
             metadata: {
                 name: name_value,
                 logo: logo_value,
@@ -163,7 +163,7 @@ tx update_badge(
     output updated_badge {
         to: Registry,
         amount: badge,
-        datum: BadgesDatum {
+        datum: BadgeDatum {
             metadata: {
                 name: name_value,
                 logo: logo_value,

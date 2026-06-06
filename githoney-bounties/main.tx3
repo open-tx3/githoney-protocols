@@ -26,11 +26,11 @@ env {
 // A full Cardano address: payment credential plus optional staking credential.
 type CardanoAddress {
     payment_credential: CardanoCredential,
-    staking_credential: OptionAddressCardanoCredential,
+    staking_credential: OptionalStakeCredential,
 }
 
 // Redeemers accepted by the bounty validator, one per lifecycle action.
-type GithoneyContractRedeemers {
+type BountyRedeemer {
     AddRewards,
     Assign,
     Merge,
@@ -46,7 +46,7 @@ type SettingsDatum {
 }
 
 // Optional Cardano address (used for the not-yet-assigned contributor).
-type OptionAddress {
+type OptionalAddress {
     Some {
         address: CardanoAddress,
     },
@@ -63,8 +63,8 @@ type CardanoCredential {
     },
 }
 
-// Staking-credential wrapper mirroring Cardano's inline vs. pointer credential.
-type StakeCredWrapper {
+// A staking credential — inline (a credential) or a pointer.
+type StakeCredential {
     Inline {
         VerificationKey: CardanoCredential,
     },
@@ -76,18 +76,18 @@ type StakeCredWrapper {
 }
 
 // Optional staking credential carried inside `CardanoAddress`.
-type OptionAddressCardanoCredential {
+type OptionalStakeCredential {
     Some {
-        stakeCredetial: StakeCredWrapper,
+        stakeCredetial: StakeCredential,
     },
     None,
 }
 
 // Datum of a bounty UTxO: parties, reward fee, deadline, merge flag, and locked value.
-type GithoneyDatum {
+type BountyDatum {
     admin_payment_credential: CardanoCredential,
     maintainer_address: CardanoAddress,
-    contributor_address: OptionAddress,
+    contributor_address: OptionalAddress,
     bounty_reward_fee: Int,
     deadline: Int,
     merged: Bool,
@@ -142,7 +142,7 @@ tx create_bounty_with_token(
     output new_bounty {
         to: Vault,
         amount: Ada(min_ada) + AnyAsset(bounty_policy_id, bounty_id, 1) + AnyAsset(reward_policy_id, reward_asset_name, reward_amount),
-        datum: GithoneyDatum {
+        datum: BountyDatum {
             admin_payment_credential: CardanoCredential::VerificationKey {
                 VerificationKey: admin_payment_key,
             },
@@ -150,15 +150,15 @@ tx create_bounty_with_token(
                 payment_credential: CardanoCredential::VerificationKey {
                     VerificationKey: maintainer_payment_key,
                 },
-                staking_credential: OptionAddressCardanoCredential::Some {
-                    stakeCredetial: StakeCredWrapper::Inline {
+                staking_credential: OptionalStakeCredential::Some {
+                    stakeCredetial: StakeCredential::Inline {
                         VerificationKey: CardanoCredential::VerificationKey {
                             VerificationKey: maintainer_stake_key,
                         },
                     },
                 },
             },
-            contributor_address: OptionAddress::None {},
+            contributor_address: OptionalAddress::None {},
             bounty_reward_fee: settings.bounty_reward_fee,
             deadline: time_limit,
             merged: false,
@@ -232,7 +232,7 @@ tx create_bounty_with_lovelace(
     output new_bounty {
         to: Vault,
         amount: Ada(min_ada + reward_amount) + AnyAsset(bounty_policy_id, bounty_id, 1),
-        datum: GithoneyDatum {
+        datum: BountyDatum {
             admin_payment_credential: CardanoCredential::VerificationKey {
                 VerificationKey: admin_payment_key,
             },
@@ -240,15 +240,15 @@ tx create_bounty_with_lovelace(
                 payment_credential: CardanoCredential::VerificationKey {
                     VerificationKey: maintainer_payment_key,
                 },
-                staking_credential: OptionAddressCardanoCredential::Some {
-                    stakeCredetial: StakeCredWrapper::Inline {
+                staking_credential: OptionalStakeCredential::Some {
+                    stakeCredetial: StakeCredential::Inline {
                         VerificationKey: CardanoCredential::VerificationKey {
                             VerificationKey: maintainer_stake_key,
                         },
                     },
                 },
             },
-            contributor_address: OptionAddress::None {},
+            contributor_address: OptionalAddress::None {},
             bounty_reward_fee: settings.bounty_reward_fee,
             deadline: time_limit,
             merged: false,
@@ -316,14 +316,14 @@ tx add_bounty_rewards(
 
     input bounty {
         ref: bounty_ref,
-        datum_is: GithoneyDatum,
-        redeemer: GithoneyContractRedeemers::AddRewards {},
+        datum_is: BountyDatum,
+        redeemer: BountyRedeemer::AddRewards {},
     }
 
     output updated_bounty {
         to: Vault,
         amount: bounty + AnyAsset(reward_policy_id, reward_asset_name, reward_amount),
-        datum: GithoneyDatum {
+        datum: BountyDatum {
             admin_payment_credential: bounty.admin_payment_credential,
             maintainer_address: bounty.maintainer_address,
             contributor_address: bounty.contributor_address,
@@ -388,23 +388,23 @@ tx assign_bounty(
 
     input bounty {
         ref: bounty_ref,
-        datum_is: GithoneyDatum,
-        redeemer: GithoneyContractRedeemers::Assign {},
+        datum_is: BountyDatum,
+        redeemer: BountyRedeemer::Assign {},
     }
 
     output updated_bounty {
         to: Vault,
         amount: bounty + Ada(min_ada), // 2 * minAda
-        datum: GithoneyDatum {
+        datum: BountyDatum {
             admin_payment_credential: bounty.admin_payment_credential,
             maintainer_address: bounty.maintainer_address,
-            contributor_address: OptionAddress::Some {
+            contributor_address: OptionalAddress::Some {
                 address: CardanoAddress {
                     payment_credential: CardanoCredential::VerificationKey {
                         VerificationKey: contributor_payment_credential,
                     },
-                    staking_credential: OptionAddressCardanoCredential::Some {
-                        stakeCredetial: StakeCredWrapper::Inline {
+                    staking_credential: OptionalStakeCredential::Some {
+                        stakeCredetial: StakeCredential::Inline {
                             VerificationKey: CardanoCredential::VerificationKey {
                                 VerificationKey: contributor_stake_credential,
                             },
@@ -473,23 +473,23 @@ tx assign_bug_bounty(
 
     input bounty {
         ref: bounty_ref,
-        datum_is: GithoneyDatum,
-        redeemer: GithoneyContractRedeemers::Assign {},
+        datum_is: BountyDatum,
+        redeemer: BountyRedeemer::Assign {},
     }
 
     output updated_bounty {
         to: Vault,
         amount: bounty + Ada(min_ada),
-        datum: GithoneyDatum {
+        datum: BountyDatum {
             admin_payment_credential: bounty.admin_payment_credential,
             maintainer_address: bounty.maintainer_address,
-            contributor_address: OptionAddress::Some {
+            contributor_address: OptionalAddress::Some {
                 address: CardanoAddress {
                     payment_credential: CardanoCredential::VerificationKey {
                         VerificationKey: contributor_payment_credential,
                     },
-                    staking_credential: OptionAddressCardanoCredential::Some {
-                        stakeCredetial: StakeCredWrapper::Inline {
+                    staking_credential: OptionalStakeCredential::Some {
+                        stakeCredetial: StakeCredential::Inline {
                             VerificationKey: CardanoCredential::VerificationKey {
                                 VerificationKey: contributor_stake_credential,
                             },
@@ -561,8 +561,8 @@ tx close_bounty_unassigned(
 
     input bounty {
         ref: bounty_ref,
-        datum_is: GithoneyDatum,
-        redeemer: GithoneyContractRedeemers::Close {},
+        datum_is: BountyDatum,
+        redeemer: BountyRedeemer::Close {},
     }
 
     mint {
@@ -639,8 +639,8 @@ tx close_bounty_unassigned_sponsored(
 
     input bounty {
         ref: bounty_ref,
-        datum_is: GithoneyDatum,
-        redeemer: GithoneyContractRedeemers::Close {},
+        datum_is: BountyDatum,
+        redeemer: BountyRedeemer::Close {},
     }
 
     mint {
@@ -717,8 +717,8 @@ tx close_bounty_assigned(
 
     input bounty {
         ref: bounty_ref,
-        datum_is: GithoneyDatum,
-        redeemer: GithoneyContractRedeemers::Close {},
+        datum_is: BountyDatum,
+        redeemer: BountyRedeemer::Close {},
     }
 
     mint {
@@ -801,8 +801,8 @@ tx close_bounty_assigned_sponsored(
 
     input bounty {
         ref: bounty_ref,
-        datum_is: GithoneyDatum,
-        redeemer: GithoneyContractRedeemers::Close {},
+        datum_is: BountyDatum,
+        redeemer: BountyRedeemer::Close {},
     }
 
     mint {
@@ -883,15 +883,15 @@ tx merge_bounty(
 
     input bounty {
         ref: bounty_ref,
-        datum_is: GithoneyDatum,
-        redeemer: GithoneyContractRedeemers::Merge {},
+        datum_is: BountyDatum,
+        redeemer: BountyRedeemer::Merge {},
     }
 
 
     output updated_bounty {
         to: Vault,
         amount: bounty - AnyAsset(reward_policy_id, reward_asset_name, githoney_fee) - Ada(min_ada),
-        datum: GithoneyDatum {
+        datum: BountyDatum {
             admin_payment_credential: bounty.admin_payment_credential,
             maintainer_address: bounty.maintainer_address,
             contributor_address: bounty.contributor_address,
@@ -966,8 +966,8 @@ tx claim_bounty(
 
     input bounty {
         ref: bounty_ref,
-        datum_is: GithoneyDatum,
-        redeemer: GithoneyContractRedeemers::Claim {},
+        datum_is: BountyDatum,
+        redeemer: BountyRedeemer::Claim {},
     }
 
     mint {

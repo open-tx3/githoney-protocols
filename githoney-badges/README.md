@@ -8,7 +8,7 @@ It is a companion to [`githoney-bounties`](../githoney-bounties/): the two are i
 
 A badge follows the CIP-68 split-token convention:
 
-- a **reference NFT** carries the metadata datum (`BadgesDatum` — a `name`/`logo`/`description` map plus a version) and lives at the **badge validator** (`Registry`);
+- a **reference NFT** carries the metadata datum (`BadgeDatum` — a `name`/`logo`/`description` map plus a version) and lives at the **badge validator** (`Registry`);
 - **fungible badge tokens** circulate from the **badge-token wallet** (`Distributor`) to recipients.
 
 The `GitHoney` wallet operates the badges: it funds mints, signs metadata updates, and reclaims badge-script UTxOs.
@@ -26,7 +26,7 @@ The `GitHoney` wallet operates the badges: it funds mints, signs metadata update
 
 - **Badges depend on the settings deployment.** `update_badge` and `collect_badge_utxos` take the GitHoney settings UTxO as a read-only `reference` input (via `env.settings_ref`) for on-chain authorization. That UTxO is published by `githoney-setup` — deploy there first. `mint_badge` and `pay_badges_to` do not touch settings.
 - **CIP-68 split tokens.** `mint_badge` produces two assets under the same `badge_policy_id`: one reference NFT (`ref_nft_asset_name`, held at the badge script with the metadata datum) and `ft_badge_amount` fungible tokens (`ft_badge_name`, sent to the `Distributor` wallet).
-- **Metadata is caller-encoded.** The `name`/`logo`/`description` keys and their `*_value` byte strings are passed as parameters and written verbatim into the `BadgesDatum` metadata map.
+- **Metadata is caller-encoded.** The `name`/`logo`/`description` keys and their `*_value` byte strings are passed as parameters and written verbatim into the `BadgeDatum` metadata map.
 - **GitHoney signs the operator actions.** `update_badge` and `collect_badge_utxos` require the `GitHoney` signature; `pay_badges_to` is a plain wallet-to-wallet token transfer.
 
 ## Environment & profiles

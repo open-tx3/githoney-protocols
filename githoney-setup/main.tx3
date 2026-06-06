@@ -51,8 +51,8 @@ type CardanoCredential {
     },
 }
 
-// Staking-credential wrapper mirroring Cardano's inline vs. pointer credential.
-type StakeCredWrapper {
+// A staking credential — inline (a credential) or a pointer.
+type StakeCredential {
     Inline {
         VerificationKey: CardanoCredential,
     },
@@ -64,9 +64,9 @@ type StakeCredWrapper {
 }
 
 // Optional staking credential carried inside `CardanoAddress`.
-type OptionAddressCardanoCredential {
+type OptionalStakeCredential {
     Some {
-        stakeCredetial: StakeCredWrapper,
+        stakeCredetial: StakeCredential,
     },
     None,
 }
@@ -74,7 +74,7 @@ type OptionAddressCardanoCredential {
 // A full Cardano address: payment credential plus optional staking credential.
 type CardanoAddress {
     payment_credential: CardanoCredential,
-    staking_credential: OptionAddressCardanoCredential,
+    staking_credential: OptionalStakeCredential,
 }
 
 // Datum of the global settings UTxO: fee-collection address and fee schedule.
@@ -85,7 +85,7 @@ type SettingsDatum {
 }
 
 // Redeemers accepted by the settings validator.
-type SettingsRedeemers {
+type SettingsRedeemer {
     UpdateSettings,
     CloseSettings,
 }
@@ -134,8 +134,8 @@ tx deploy(
                 payment_credential: CardanoCredential::VerificationKey {
                     VerificationKey: githoney_payment_credential,
                 },
-                staking_credential: OptionAddressCardanoCredential::Some {
-                    stakeCredetial: StakeCredWrapper::Inline {
+                staking_credential: OptionalStakeCredential::Some {
+                    stakeCredetial: StakeCredential::Inline {
                         VerificationKey: CardanoCredential::VerificationKey {
                             VerificationKey: githoney_staking_credential,
                         },
@@ -184,7 +184,7 @@ tx update(
         from: Vault,
         min_amount: AnyAsset(settings_policy_id, settings_token_name,1),
         datum_is: SettingsDatum,
-        redeemer: SettingsRedeemers::UpdateSettings {},
+        redeemer: SettingsRedeemer::UpdateSettings {},
     }
 
     input funds {
@@ -200,8 +200,8 @@ tx update(
                 payment_credential: CardanoCredential::VerificationKey {
                     VerificationKey: githoney_payment_key,
                 },
-                staking_credential: OptionAddressCardanoCredential::Some {
-                    stakeCredetial: StakeCredWrapper::Inline {
+                staking_credential: OptionalStakeCredential::Some {
+                    stakeCredetial: StakeCredential::Inline {
                         VerificationKey: CardanoCredential::VerificationKey {
                             VerificationKey: githoney_staking_key,
                         },
@@ -253,7 +253,7 @@ tx close(
         from: Vault,
         min_amount: AnyAsset(settings_policy_id, settings_token_name, 1),
         datum_is: SettingsDatum,
-        redeemer: SettingsRedeemers::CloseSettings {},
+        redeemer: SettingsRedeemer::CloseSettings {},
     }
 
     mint {
