@@ -1,0 +1,282 @@
+// ------------------------------------------------------------------
+// Parties
+// ------------------------------------------------------------------
+
+/// GitHoney Plutus validator address where the settings (and bounty) UTxOs are locked.
+party Script;
+/// GitHoney operator wallet that funds and signs settings management.
+party GitHoneyAddr;
+
+// ------------------------------------------------------------------
+// Environment
+// ------------------------------------------------------------------
+// The compiled GitHoney contract suite for a network: the spend validator
+// (published as a reference script for bounty/badge spends to use), the
+// settings spend validator and minting policy, and the settings control token.
+// Loaded from the active profile's `.env.<profile>` file. Per-deployment
+// choices (the fee schedule, the GitHoney address, the seed UTxO) stay tx
+// parameters — they are what an operator sets when creating an environment.
+env {
+    /// GitHoney spend validator bytes (settings + bounty logic), published as a reference script.
+    githoney_script: Bytes,
+    /// Plutus version of the GitHoney spend validator.
+    githoney_script_version: Int,
+
+    /// Settings spend validator bytes that witness settings spends.
+    settings_validator_script: Bytes,
+    /// Plutus version of the settings spend validator.
+    settings_validator_version: Int,
+
+    /// Settings minting-policy bytes that mint/burn the settings control token.
+    settings_minting_policy: Bytes,
+    /// Plutus version of the settings minting policy.
+    settings_minting_version: Int,
+    /// Policy id of the settings control token.
+    settings_policy_id: Bytes,
+    /// Asset name of the settings control token.
+    settings_token_name: Bytes,
+}
+
+// ------------------------------------------------------------------
+// Types
+// ------------------------------------------------------------------
+
+// A Cardano credential — either a verification-key hash or a script hash.
+type CardanoCredential {
+    VerificationKey {
+        VerificationKey: Bytes,
+    },
+    Script {
+        Script: Bytes,
+    },
+}
+
+// Staking-credential wrapper mirroring Cardano's inline vs. pointer credential.
+type StakeCredWrapper {
+    Inline {
+        VerificationKey: CardanoCredential,
+    },
+    Pointer {
+        slotNumber: Int,
+        transactionIndex: Int,
+        certificateIndex: Int,
+    },
+}
+
+// Optional staking credential carried inside `CardanoAddress`.
+type OptionAddressCardanoCredential {
+    Some {
+        stakeCredetial: StakeCredWrapper,
+    },
+    None,
+}
+
+// A full Cardano address: payment credential plus optional staking credential.
+type CardanoAddress {
+    payment_credential: CardanoCredential,
+    staking_credential: OptionAddressCardanoCredential,
+}
+
+// Datum of the global settings UTxO: fee-collection address and fee schedule.
+type SettingsDatum {
+    githoney_address: CardanoAddress,
+    bounty_creation_fee: Int,
+    bounty_reward_fee: Int,
+}
+
+// Redeemers accepted by the settings validator.
+type SettingsRedeemers {
+    UpdateSettings,
+    CloseSettings,
+}
+
+// ==================================================================
+// Settings
+// ==================================================================
+
+/// Mint the settings NFT and publish the settings UTxO with the GitHoney address and fee schedule.
+tx deploy(
+    /// Flat lovelace fee charged on every new bounty.
+    creation_fee: Int,
+    /// Reward-fee cut GitHoney takes on merge.
+    reward_fee: Int,
+    /// GitHoney fee-collection payment credential (vkey hash).
+    githoney_payment_credential: Bytes,
+    /// GitHoney fee-collection staking credential (vkey hash).
+    githoney_staking_credential: Bytes,
+    /// One-shot wallet UTxO consumed to make the settings mint unique.
+    utxo_ref: UtxoRef,
+) {
+
+    locals {
+        publish_cost: Ada(50000000),
+    }
+
+    input one_shot_utxo {
+        ref: utxo_ref,
+    }
+
+    collateral {
+        from: GitHoneyAddr,
+        min_amount: Ada(5000000),
+    }
+
+    mint {
+        amount: AnyAsset(settings_policy_id, settings_token_name, 1),
+        redeemer: (),
+    }
+
+    cardano::publish settings_utxo {
+        to: Script,
+        amount: publish_cost + AnyAsset(settings_policy_id, settings_token_name, 1),
+        datum: SettingsDatum {
+            githoney_address: CardanoAddress {
+                payment_credential: CardanoCredential::VerificationKey {
+                    VerificationKey: githoney_payment_credential,
+                },
+                staking_credential: OptionAddressCardanoCredential::Some {
+                    stakeCredetial: StakeCredWrapper::Inline {
+                        VerificationKey: CardanoCredential::VerificationKey {
+                            VerificationKey: githoney_staking_credential,
+                        },
+                    },
+                },
+            },
+            bounty_creation_fee: creation_fee,
+            bounty_reward_fee: reward_fee,
+        },
+        version: githoney_script_version,
+        script: githoney_script,
+    }
+
+    output change {
+        to: GitHoneyAddr,
+        amount: one_shot_utxo - fees - publish_cost,
+    }
+
+    cardano::plutus_witness {
+        version: settings_minting_version,
+        script: settings_minting_policy,
+    }
+
+    metadata {
+        674: "Githoney: Deploy settings",
+    }
+}
+
+/// Rewrite the settings datum with a new GitHoney address and/or fee schedule.
+tx update(
+    /// New flat lovelace fee charged on every new bounty.
+    new_creation_fee: Int,
+    /// New reward-fee cut GitHoney takes on merge.
+    new_reward_fee: Int,
+    /// New GitHoney fee-collection payment credential (vkey hash).
+    githoney_payment_key: Bytes,
+    /// New GitHoney fee-collection staking credential (vkey hash).
+    githoney_staking_key: Bytes,
+) {
+    collateral {
+        from: GitHoneyAddr,
+        min_amount: Ada(20000000),
+    }
+
+    input current {
+        from: Script,
+        min_amount: AnyAsset(settings_policy_id, settings_token_name,1),
+        datum_is: SettingsDatum,
+        redeemer: SettingsRedeemers::UpdateSettings {},
+    }
+
+    input githoney_wallet {
+        from: GitHoneyAddr,
+        min_amount: min_utxo(change) + fees,
+    }
+
+    cardano::publish settings_utxo {
+        to: Script,
+        amount: current,
+        datum: SettingsDatum {
+            githoney_address: CardanoAddress {
+                payment_credential: CardanoCredential::VerificationKey {
+                    VerificationKey: githoney_payment_key,
+                },
+                staking_credential: OptionAddressCardanoCredential::Some {
+                    stakeCredetial: StakeCredWrapper::Inline {
+                        VerificationKey: CardanoCredential::VerificationKey {
+                            VerificationKey: githoney_staking_key,
+                        },
+                    },
+                },
+            },
+            bounty_creation_fee: new_creation_fee,
+            bounty_reward_fee: new_reward_fee,
+        },
+        version: githoney_script_version,
+        script: githoney_script,
+    }
+
+    output change {
+        to: GitHoneyAddr,
+        amount: githoney_wallet - fees,
+    }
+
+    signers {
+        GitHoneyAddr,
+    }
+
+    cardano::plutus_witness {
+        version: settings_validator_version,
+        script: settings_validator_script,
+    }
+}
+
+/// Burn the settings NFT and tear down the settings UTxO, recovering its ADA.
+tx close(
+    /// GitHoney payment credential (vkey hash) recovering the funds.
+    githoney_payment_credential: Bytes,
+    /// GitHoney staking credential (vkey hash) recovering the funds.
+    githoney_staking_credential: Bytes,
+    /// Lovelace held in the settings UTxO, returned to GitHoney.
+    remaining_ada: Int,
+) {
+    collateral {
+        from: GitHoneyAddr,
+        min_amount: Ada(20000000),
+    }
+
+    input githoney_wallet {
+        from: GitHoneyAddr,
+        min_amount: min_utxo(change) + fees,
+    }
+
+    input current {
+        from: Script,
+        min_amount: AnyAsset(settings_policy_id, settings_token_name, 1),
+        datum_is: SettingsDatum,
+        redeemer: SettingsRedeemers::CloseSettings {},
+    }
+
+    mint {
+        amount: AnyAsset(settings_policy_id, settings_token_name, -1),
+        redeemer: (),
+    }
+
+    output change {
+        to: GitHoneyAddr,
+        amount: githoney_wallet - fees + Ada(remaining_ada),
+    }
+
+    signers {
+        GitHoneyAddr,
+    }
+
+    cardano::plutus_witness {
+        version: settings_validator_version,
+        script: settings_validator_script,
+    }
+
+    cardano::plutus_witness {
+        version: settings_minting_version,
+        script: settings_minting_policy,
+    }
+}

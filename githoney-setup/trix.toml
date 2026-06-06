@@ -1,0 +1,31 @@
+[protocol]
+name = "githoney-setup"
+scope = "open-tx3"
+version = "0.1.0"
+description = "Deploy and manage a GitHoney environment on Cardano: publish the settings UTxO and validator reference script, update the fee schedule, and tear it down"
+main = "main.tx3"
+readme = "README.md"
+logo = "logo.png"
+repository = "https://github.com/open-tx3/githoney-protocols"
+
+[ledger]
+family = "cardano"
+
+# Per-network profiles. Each loads `.env.<profile>` to populate the
+# network-level `env { ... }` block in main.tx3 — the compiled GitHoney
+# contract suite for that network (spend validator, settings validator and
+# minting policy, settings control token). The values come from the compiled
+# GitHoney scripts; the committed files hold placeholders — replace them with
+# the real script bytes/ids before deploying.
+
+[profile.local]
+env_file = ".env.local"
+
+[profile.preview]
+env_file = ".env.preview"
+
+[profile.preprod]
+env_file = ".env.preprod"
+
+[profile.mainnet]
+env_file = ".env.mainnet"

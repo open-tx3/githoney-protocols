@@ -19,41 +19,19 @@ party Sponsor;
 // ------------------------------------------------------------------
 // Environment
 // ------------------------------------------------------------------
-// Per-network deployment configuration: the published validator/minting
-// scripts, the settings control token and its reference UTxO, the GitHoney
-// admin credential, and the current fee schedule. Loaded from the active
-// profile's `.env.<profile>` file. Per-call values (bounty id, reward asset,
-// maintainer/contributor keys, validity window, min-ADA) stay tx parameters.
+// The deployed GitHoney environment this protocol operates against, selected
+// per network via the active profile's `.env.<profile>` file. The settings
+// UTxO is published by the `githoney-setup` protocol; the fee schedule is read
+// from its datum at resolve time (see the `contract` reference in the create
+// transactions), so it is not duplicated here. Per-call values (bounty id,
+// reward asset, maintainer/contributor keys, validity window, min-ADA) stay tx
+// parameters.
 env {
-    /// GitHoney spend validator bytes (settings + bounty logic), published as a reference script.
-    githoney_script: Bytes,
-    /// Plutus version of the GitHoney spend validator.
-    githoney_script_version: Int,
-
-    /// Settings spend validator bytes that witness settings spends.
-    settings_validator_script: Bytes,
-    /// Plutus version of the settings spend validator.
-    settings_validator_version: Int,
-
-    /// Settings minting-policy bytes that mint/burn the settings control token.
-    settings_minting_policy: Bytes,
-    /// Plutus version of the settings minting policy.
-    settings_minting_version: Int,
-    /// Policy id of the settings control token.
-    settings_policy_id: Bytes,
-    /// Asset name of the settings control token.
-    settings_token_name: Bytes,
-
-    /// Published settings UTxO, referenced by every bounty transaction.
+    /// Published GitHoney settings UTxO, referenced by every bounty transaction.
     settings_ref: UtxoRef,
 
     /// Admin payment credential (vkey hash) recorded in every bounty datum.
     admin_payment_key: Bytes,
-
-    /// Flat lovelace fee charged on every new bounty (mirrors the settings datum).
-    bounty_creation_fee: Int,
-    /// Reward-fee cut GitHoney takes on merge (mirrors the settings datum).
-    bounty_rewards_fee: Int,
 
     /// Minting policy id of the bounty NFT.
     bounty_policy_id: Bytes,
@@ -76,12 +54,6 @@ type GithoneyContractRedeemers {
     Merge,
     Close,
     Claim,
-}
-
-// Redeemers accepted by the settings validator.
-type SettingsRedeemers {
-    UpdateSettings,
-    CloseSettings,
 }
 
 // Datum of the global settings UTxO: fee-collection address and fee schedule.
@@ -141,198 +113,6 @@ type GithoneyDatum {
 }
 
 // ==================================================================
-// Settings
-// ==================================================================
-
-/// Mint the settings NFT and publish the settings UTxO with the GitHoney address and fee schedule.
-tx deploy_settings(
-    /// Flat lovelace fee charged on every new bounty.
-    creation_fee: Int,
-    /// Reward-fee cut GitHoney takes on merge.
-    reward_fee: Int,
-    /// GitHoney fee-collection payment credential (vkey hash).
-    githoney_payment_credential: Bytes,
-    /// GitHoney fee-collection staking credential (vkey hash).
-    githoney_staking_credential: Bytes,
-    /// One-shot wallet UTxO consumed to make the settings mint unique.
-    utxo_ref: UtxoRef,
-) {
-
-    locals {
-        publish_cost: Ada(50000000),
-    }
-
-    input one_shot_utxo {
-        ref: utxo_ref,
-    }
-
-    collateral {
-        from: GitHoneyAddr,
-        min_amount: Ada(5000000),
-    }
-
-    mint {
-        amount: AnyAsset(settings_policy_id, settings_token_name, 1),
-        redeemer: (),
-    }
-
-    cardano::publish settings_utxo {
-        to: Script,
-        amount: publish_cost + AnyAsset(settings_policy_id, settings_token_name, 1),
-        datum: SettingsDatum {
-            githoney_address: CardanoAddress {
-                payment_credential: CardanoCredential::VerificationKey {
-                    VerificationKey: githoney_payment_credential,
-                },
-                staking_credential: OptionAddressCardanoCredential::Some {
-                    stakeCredetial: StakeCredWrapper::Inline {
-                        VerificationKey: CardanoCredential::VerificationKey {
-                            VerificationKey: githoney_staking_credential,
-                        },
-                    },
-                },
-            },
-            bounty_creation_fee: creation_fee,
-            bounty_reward_fee: reward_fee,
-        },
-        version: githoney_script_version,
-        script: githoney_script,
-    }
-
-    output change {
-        to: GitHoneyAddr,
-        amount: one_shot_utxo - fees - publish_cost,
-    }
-
-    cardano::plutus_witness {
-        version: settings_minting_version,
-        script: settings_minting_policy,
-    }
-
-    metadata {
-        674: "Githoney: Deploy settings",
-    }
-}
-
-/// Rewrite the settings datum with a new GitHoney address and/or fee schedule.
-tx update_settings(
-    /// New flat lovelace fee charged on every new bounty.
-    new_creation_fee: Int,
-    /// New reward-fee cut GitHoney takes on merge.
-    new_reward_fee: Int,
-    /// New GitHoney fee-collection payment credential (vkey hash).
-    githoney_payment_key: Bytes,
-    /// New GitHoney fee-collection staking credential (vkey hash).
-    githoney_staking_key: Bytes,
-) {
-    collateral {
-        from: GitHoneyAddr,
-        min_amount: Ada(20000000),
-    }
-
-    input current {
-        from: Script,
-        min_amount: AnyAsset(settings_policy_id, settings_token_name,1),
-        datum_is: SettingsDatum,
-        redeemer: SettingsRedeemers::UpdateSettings {},
-    }
-
-    input githoney_wallet {
-        from: GitHoneyAddr,
-        min_amount: min_utxo(change) + fees,
-    }
-
-    cardano::publish settings_utxo {
-        to: Script,
-        amount: current,
-        datum: SettingsDatum {
-            githoney_address: CardanoAddress {
-                payment_credential: CardanoCredential::VerificationKey {
-                    VerificationKey: githoney_payment_key,
-                },
-                staking_credential: OptionAddressCardanoCredential::Some {
-                    stakeCredetial: StakeCredWrapper::Inline {
-                        VerificationKey: CardanoCredential::VerificationKey {
-                            VerificationKey: githoney_staking_key,
-                        },
-                    },
-                },
-            },
-            bounty_creation_fee: new_creation_fee,
-            bounty_reward_fee: new_reward_fee,
-        },
-        version: githoney_script_version,
-        script: githoney_script,
-    }
-
-    output change {
-        to: GitHoneyAddr,
-        amount: githoney_wallet - fees,
-    }
-
-    signers {
-        GitHoneyAddr,
-    }
-
-    cardano::plutus_witness {
-        version: settings_validator_version,
-        script: settings_validator_script,
-    }
-}
-
-/// Burn the settings NFT and tear down the settings UTxO, recovering its ADA.
-tx close_settings(
-    /// GitHoney payment credential (vkey hash) recovering the funds.
-    githoney_payment_credential: Bytes,
-    /// GitHoney staking credential (vkey hash) recovering the funds.
-    githoney_staking_credential: Bytes,
-    /// Lovelace held in the settings UTxO, returned to GitHoney.
-    remaining_ada: Int,
-) {
-    collateral {
-        from: GitHoneyAddr,
-        min_amount: Ada(20000000),
-    }
-
-    input githoney_wallet {
-        from: GitHoneyAddr,
-        min_amount: min_utxo(change) + fees,
-    }
-
-    input current {
-        from: Script,
-        min_amount: AnyAsset(settings_policy_id, settings_token_name, 1),
-        datum_is: SettingsDatum,
-        redeemer: SettingsRedeemers::CloseSettings {},
-    }
-
-    mint {
-        amount: AnyAsset(settings_policy_id, settings_token_name, -1),
-        redeemer: (),
-    }
-
-    output change {
-        to: GitHoneyAddr,
-        amount: githoney_wallet - fees + Ada(remaining_ada),
-    }
-
-    signers {
-        GitHoneyAddr,
-    }
-
-    cardano::plutus_witness {
-        version: settings_validator_version,
-        script: settings_validator_script,
-    }
-
-    cardano::plutus_witness {
-        version: settings_minting_version,
-        script: settings_minting_policy,
-    }
-}
-
-
-// ==================================================================
 // Bounties
 // ==================================================================
 
@@ -363,6 +143,7 @@ tx create_bounty_with_token(
 ) {
     reference contract {
         ref: settings_ref,
+        datum_is: SettingsDatum,
     }
 
     collateral {
@@ -372,7 +153,7 @@ tx create_bounty_with_token(
 
     input maintainer_input {
         from: Maintainer,
-        min_amount: min_utxo(bounty_utxo) + min_utxo(maintainer_output) + AnyAsset(reward_policy_id, reward_asset_name, reward_amount) + Ada(bounty_creation_fee) + fees,
+        min_amount: min_utxo(bounty_utxo) + min_utxo(maintainer_output) + AnyAsset(reward_policy_id, reward_asset_name, reward_amount) + Ada(contract.bounty_creation_fee) + fees,
     }
 
     mint {
@@ -400,7 +181,7 @@ tx create_bounty_with_token(
                 },
             },
             contributor_address: OptionAddress::None {},
-            bounty_reward_fee: bounty_rewards_fee,
+            bounty_reward_fee: contract.bounty_reward_fee,
             deadline: time_limit,
             merged: false,
             initial_value: {
@@ -416,12 +197,12 @@ tx create_bounty_with_token(
 
     output githoney_wallet{
         to: GitHoneyAddr,
-        amount: Ada(bounty_creation_fee),
+        amount: Ada(contract.bounty_creation_fee),
     }
 
     output maintainer_output {
         to: Maintainer,
-        amount: maintainer_input - Ada(bounty_creation_fee) - fees - AnyAsset(reward_policy_id, reward_asset_name, reward_amount) - Ada(min_ada),
+        amount: maintainer_input - Ada(contract.bounty_creation_fee) - fees - AnyAsset(reward_policy_id, reward_asset_name, reward_amount) - Ada(min_ada),
     }
 
     validity {
@@ -452,6 +233,7 @@ tx create_bounty_with_lovelace(
 ) {
     reference contract {
         ref: settings_ref,
+        datum_is: SettingsDatum,
     }
 
     collateral {
@@ -461,7 +243,7 @@ tx create_bounty_with_lovelace(
 
     input maintainer_input {
         from: Maintainer,
-        min_amount: min_utxo(bounty_utxo) + min_utxo(maintainer_output) + Ada(bounty_creation_fee + reward_amount) + fees,
+        min_amount: min_utxo(bounty_utxo) + min_utxo(maintainer_output) + Ada(contract.bounty_creation_fee + reward_amount) + fees,
     }
 
     mint {
@@ -489,7 +271,7 @@ tx create_bounty_with_lovelace(
                 },
             },
             contributor_address: OptionAddress::None {},
-            bounty_reward_fee: bounty_rewards_fee,
+            bounty_reward_fee: contract.bounty_reward_fee,
             deadline: time_limit,
             merged: false,
             initial_value: {
@@ -502,12 +284,12 @@ tx create_bounty_with_lovelace(
 
     output githoney_wallet{
         to: GitHoneyAddr,
-        amount: Ada(bounty_creation_fee),
+        amount: Ada(contract.bounty_creation_fee),
     }
 
     output maintainer_output {
         to: Maintainer,
-        amount: maintainer_input - Ada(bounty_creation_fee + reward_amount + min_ada) - fees,
+        amount: maintainer_input - Ada(contract.bounty_creation_fee + reward_amount + min_ada) - fees,
     }
 
     validity {
@@ -541,6 +323,7 @@ tx add_bounty_rewards(
 ) {
     reference contract {
         ref: settings_ref,
+        datum_is: SettingsDatum,
     }
 
     collateral {
@@ -612,6 +395,7 @@ tx assign_bounty(
 ) {
     reference contract {
         ref: settings_ref,
+        datum_is: SettingsDatum,
     }
 
     collateral {
@@ -696,6 +480,7 @@ tx assign_bug_bounty(
 ) {
     reference contract {
         ref: settings_ref,
+        datum_is: SettingsDatum,
     }
 
     collateral {
@@ -783,6 +568,7 @@ tx close_bounty_unassigned(
 ) {
     reference contract {
         ref: settings_ref,
+        datum_is: SettingsDatum,
     }
 
     collateral {
@@ -860,6 +646,7 @@ tx close_bounty_unassigned_sponsored(
 ) {
     reference contract {
         ref: settings_ref,
+        datum_is: SettingsDatum,
     }
 
     collateral {
@@ -937,6 +724,7 @@ tx close_bounty_assigned(
 ) {
     reference contract {
         ref: settings_ref,
+        datum_is: SettingsDatum,
     }
 
     collateral {
@@ -1020,6 +808,7 @@ tx close_bounty_assigned_sponsored(
 ) {
     reference contract {
         ref: settings_ref,
+        datum_is: SettingsDatum,
     }
 
     collateral {
@@ -1101,6 +890,7 @@ tx merge_bounty(
 ) {
     reference contract {
         ref: settings_ref,
+        datum_is: SettingsDatum,
     }
 
     collateral {
@@ -1183,6 +973,7 @@ tx claim_bounty(
 ) {
     reference contract {
         ref: settings_ref,
+        datum_is: SettingsDatum,
     }
 
     collateral {
