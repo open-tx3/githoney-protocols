@@ -3,9 +3,9 @@
 // ------------------------------------------------------------------
 
 /// GitHoney Plutus validator address where the settings (and bounty) UTxOs are locked.
-party Script;
+party Vault;
 /// GitHoney operator wallet that funds and signs settings management.
-party GitHoneyAddr;
+party GitHoney;
 
 // ------------------------------------------------------------------
 // Environment
@@ -117,7 +117,7 @@ tx deploy(
     }
 
     collateral {
-        from: GitHoneyAddr,
+        from: GitHoney,
         min_amount: Ada(5000000),
     }
 
@@ -127,7 +127,7 @@ tx deploy(
     }
 
     cardano::publish settings_utxo {
-        to: Script,
+        to: Vault,
         amount: publish_cost + AnyAsset(settings_policy_id, settings_token_name, 1),
         datum: SettingsDatum {
             githoney_address: CardanoAddress {
@@ -150,7 +150,7 @@ tx deploy(
     }
 
     output change {
-        to: GitHoneyAddr,
+        to: GitHoney,
         amount: one_shot_utxo - fees - publish_cost,
     }
 
@@ -176,24 +176,24 @@ tx update(
     githoney_staking_key: Bytes,
 ) {
     collateral {
-        from: GitHoneyAddr,
+        from: GitHoney,
         min_amount: Ada(20000000),
     }
 
     input current {
-        from: Script,
+        from: Vault,
         min_amount: AnyAsset(settings_policy_id, settings_token_name,1),
         datum_is: SettingsDatum,
         redeemer: SettingsRedeemers::UpdateSettings {},
     }
 
     input githoney_wallet {
-        from: GitHoneyAddr,
+        from: GitHoney,
         min_amount: min_utxo(change) + fees,
     }
 
     cardano::publish settings_utxo {
-        to: Script,
+        to: Vault,
         amount: current,
         datum: SettingsDatum {
             githoney_address: CardanoAddress {
@@ -216,12 +216,12 @@ tx update(
     }
 
     output change {
-        to: GitHoneyAddr,
+        to: GitHoney,
         amount: githoney_wallet - fees,
     }
 
     signers {
-        GitHoneyAddr,
+        GitHoney,
     }
 
     cardano::plutus_witness {
@@ -240,17 +240,17 @@ tx close(
     remaining_ada: Int,
 ) {
     collateral {
-        from: GitHoneyAddr,
+        from: GitHoney,
         min_amount: Ada(20000000),
     }
 
     input githoney_wallet {
-        from: GitHoneyAddr,
+        from: GitHoney,
         min_amount: min_utxo(change) + fees,
     }
 
     input current {
-        from: Script,
+        from: Vault,
         min_amount: AnyAsset(settings_policy_id, settings_token_name, 1),
         datum_is: SettingsDatum,
         redeemer: SettingsRedeemers::CloseSettings {},
@@ -262,12 +262,12 @@ tx close(
     }
 
     output change {
-        to: GitHoneyAddr,
+        to: GitHoney,
         amount: githoney_wallet - fees + Ada(remaining_ada),
     }
 
     signers {
-        GitHoneyAddr,
+        GitHoney,
     }
 
     cardano::plutus_witness {

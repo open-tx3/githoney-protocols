@@ -7,12 +7,12 @@ party Maintainer;
 /// Developer assigned to a bounty who claims the reward once the work is merged.
 party Contributor;
 /// GitHoney Plutus validator address that locks the settings and bounty UTxOs.
-party Script;
+party Vault;
 
 /// GitHoney operator key. Signs `merge_bounty` and every `close_bounty_*` transaction.
 party Admin;
 /// GitHoney fee-collection wallet. Receives the creation fee and the merge reward fee.
-party GitHoneyAddr;
+party GitHoney;
 /// Third party that tops up an existing bounty's reward via `add_bounty_rewards`.
 party Sponsor;
 
@@ -162,7 +162,7 @@ tx create_bounty_with_token(
     }
 
     output bounty_utxo {
-        to: Script,
+        to: Vault,
         amount: Ada(min_ada) + AnyAsset(bounty_policy_id, bounty_id, 1) + AnyAsset(reward_policy_id, reward_asset_name, reward_amount),
         datum: GithoneyDatum {
             admin_payment_credential: CardanoCredential::VerificationKey {
@@ -196,7 +196,7 @@ tx create_bounty_with_token(
     }
 
     output githoney_wallet{
-        to: GitHoneyAddr,
+        to: GitHoney,
         amount: Ada(contract.bounty_creation_fee),
     }
 
@@ -252,7 +252,7 @@ tx create_bounty_with_lovelace(
     }
 
     output bounty_utxo {
-        to: Script,
+        to: Vault,
         amount: Ada(min_ada + reward_amount) + AnyAsset(bounty_policy_id, bounty_id, 1),
         datum: GithoneyDatum {
             admin_payment_credential: CardanoCredential::VerificationKey {
@@ -283,7 +283,7 @@ tx create_bounty_with_lovelace(
     }
 
     output githoney_wallet{
-        to: GitHoneyAddr,
+        to: GitHoney,
         amount: Ada(contract.bounty_creation_fee),
     }
 
@@ -343,7 +343,7 @@ tx add_bounty_rewards(
     }
 
     output bounty_utxo {
-        to: Script,
+        to: Vault,
         amount: current + AnyAsset(reward_policy_id, reward_asset_name, reward_amount),
         datum: GithoneyDatum {
             admin_payment_credential: current.admin_payment_credential,
@@ -415,7 +415,7 @@ tx assign_bounty(
     }
 
     output bounty_utxo {
-        to: Script,
+        to: Vault,
         amount: current + Ada(min_ada), // 2 * minAda
         datum: GithoneyDatum {
             admin_payment_credential: current.admin_payment_credential,
@@ -500,7 +500,7 @@ tx assign_bug_bounty(
     }
 
     output bounty_utxo {
-        to: Script,
+        to: Vault,
         amount: current + Ada(min_ada),
         datum: GithoneyDatum {
             admin_payment_credential: current.admin_payment_credential,
@@ -911,7 +911,7 @@ tx merge_bounty(
 
 
     output bounty_utxo {
-        to: Script,
+        to: Vault,
         amount: current - AnyAsset(reward_policy_id, reward_asset_name, githoney_fee) - Ada(min_ada),
         datum: GithoneyDatum {
             admin_payment_credential: current.admin_payment_credential,
@@ -929,7 +929,7 @@ tx merge_bounty(
     }
 
     output githoney_output {
-        to: GitHoneyAddr,
+        to: GitHoney,
         amount: AnyAsset(reward_policy_id, reward_asset_name, githoney_fee) + min_utxo(githoney_output),
     }
 

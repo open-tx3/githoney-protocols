@@ -13,7 +13,7 @@ A trix **profile** describes one *deployed environment*. The deploy/update/close
 
 ## Overview
 
-The settings UTxO lives at the GitHoney validator (`Script`) and is identified by a single **settings control token** (`settings_policy_id` / `settings_token_name`). It carries a `SettingsDatum` — the GitHoney address plus the `bounty_creation_fee` and `bounty_reward_fee`. The `deploy` transaction both publishes the GitHoney spend validator as a reference script (via `cardano::publish`) and mints the control token, so the same UTxO serves as the protocol's settings record *and* the reference script that bounty spends validate against.
+The settings UTxO lives at the GitHoney validator (`Vault`) and is identified by a single **settings control token** (`settings_policy_id` / `settings_token_name`). It carries a `SettingsDatum` — the GitHoney address plus the `bounty_creation_fee` and `bounty_reward_fee`. The `deploy` transaction both publishes the GitHoney spend validator as a reference script (via `cardano::publish`) and mints the control token, so the same UTxO serves as the protocol's settings record *and* the reference script that bounty spends validate against.
 
 ## Transactions
 
@@ -28,7 +28,7 @@ The settings UTxO lives at the GitHoney validator (`Script`) and is identified b
 - **Deploy before operating.** `githoney-bounties` and `githoney-badges` reference the settings UTxO this protocol publishes (and bounty spends rely on its reference script). Run `deploy` first and feed the resulting UTxO ref to those protocols as `settings_ref`.
 - **`deploy` is operator-driven.** The fee schedule (`creation_fee`, `reward_fee`) and GitHoney address credentials are parameters chosen at deploy time, not `env` values — they define the environment being created. `update` changes them later.
 - **One control token per environment.** `deploy` mints a single NFT under `settings_policy_id` / `settings_token_name`; `update`/`close` locate the settings UTxO by that token. Multiple environments on one network use distinct token names.
-- **GitHoney signs `update`/`close`.** Both spend the settings UTxO and require the `GitHoneyAddr` signature.
+- **GitHoney signs `update`/`close`.** Both spend the settings UTxO and require the `GitHoney` signature.
 
 ## Environment & profiles
 

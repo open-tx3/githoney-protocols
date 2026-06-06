@@ -15,7 +15,7 @@ Three roles drive the contract:
 
 - **Maintainer** — owns the repository/issue, creates and funds the bounty, and recovers funds if it is closed unassigned.
 - **Contributor** — assigns themselves to a bounty and claims the reward once the work is merged.
-- **Admin / GitHoney** — the protocol operator. The `Admin` key signs `merge_bounty` and the `close_bounty_*` transactions; the `GitHoneyAddr` collects creation and reward fees.
+- **Admin / GitHoney** — the protocol operator. The `Admin` key signs `merge_bounty` and the `close_bounty_*` transactions; the `GitHoney` collects creation and reward fees.
 
 A bounty moves `create_bounty → (add_bounty_rewards) → assign_bounty → merge_bounty → claim_bounty`, or is unwound at any earlier point with one of the `close_bounty_*` transactions.
 
