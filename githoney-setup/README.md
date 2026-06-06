@@ -33,8 +33,7 @@ The settings UTxO lives at the GitHoney validator (`Vault`) and is identified by
 ## Environment & profiles
 
 The network-level contract suite lives in the `env { ... }` block of `main.tx3`,
-populated per network from the active profile's `.env.<profile>` file
-(`local` / `preview` / `preprod` / `mainnet`):
+populated per network from the active profile's `.env.<profile>` file:
 
 | `env` value | Meaning |
 |---|---|
@@ -43,8 +42,9 @@ populated per network from the active profile's `.env.<profile>` file
 | `settings_minting_policy` / `settings_minting_version` | Settings minting policy that mints/burns the control token. |
 | `settings_policy_id` / `settings_token_name` | Policy id and asset name of the settings control token. |
 
-The committed `.env.*` files hold **placeholders** — fill them from the compiled GitHoney
-scripts before deploying.
+Only the `preprod` profile is configured (from the live GitHoney deployment); its
+`settings_validator_script` is still a placeholder (those bytes aren't published).
+Add a profile per network as new contract suites are deployed.
 
 ## Caller preparation
 

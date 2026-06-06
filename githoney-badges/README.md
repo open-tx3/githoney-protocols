@@ -32,8 +32,7 @@ The `GitHoney` wallet operates the badges: it funds mints, signs metadata update
 ## Environment & profiles
 
 The network-level deployment config lives in the `env { ... }` block of `main.tx3`,
-populated per network from the active profile's `.env.<profile>` file
-(`local` / `preview` / `preprod` / `mainnet`):
+populated per network from the active profile's `.env.<profile>` file:
 
 | `env` value | Meaning |
 |---|---|
@@ -42,8 +41,8 @@ populated per network from the active profile's `.env.<profile>` file
 | `badge_policy_script` / `badge_policy_script_version` | Badge minting policy and its Plutus version. |
 | `badge_policy_id` | Minting policy id of the badge tokens. |
 
-The committed `.env.*` files hold **placeholders** — fill them from a deployed GitHoney
-`config.json` before invoking against a real network.
+Only the `preprod` profile is configured (from the live GitHoney deployment). Add a
+profile per network as new environments are deployed.
 
 ## Caller preparation
 

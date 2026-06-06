@@ -52,9 +52,8 @@ A bounty moves `create_bounty → (add_bounty_rewards) → assign_bounty → mer
 ## Environment & profiles
 
 The network-level deployment config lives in the `env { ... }` block of `main.tx3`,
-populated per network from the active profile's `.env.<profile>` file
-(`local` / `preview` / `preprod` / `mainnet`). These are constant for a deployment,
-so they are not passed per call:
+populated per network from the active profile's `.env.<profile>` file. These are
+constant for a deployment, so they are not passed per call:
 
 | `env` value | Meaning |
 |---|---|
@@ -62,8 +61,8 @@ so they are not passed per call:
 | `admin_payment_key` | GitHoney admin credential recorded in every bounty datum. |
 | `bounty_policy_id` | Bounty NFT minting policy id. |
 
-The committed `.env.*` files hold **placeholders** — fill them from the `githoney-setup`
-deployment for the target network before invoking.
+Only the `preprod` profile is configured (from the live GitHoney deployment). Add a
+profile per network as new environments are deployed.
 
 ## Caller preparation
 

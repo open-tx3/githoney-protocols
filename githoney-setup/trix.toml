@@ -11,21 +11,10 @@ repository = "https://github.com/open-tx3/githoney-protocols"
 [ledger]
 family = "cardano"
 
-# Per-network profiles. Each loads `.env.<profile>` to populate the
-# network-level `env { ... }` block in main.tx3 — the compiled GitHoney
-# contract suite for that network (spend validator, settings validator and
-# minting policy, settings control token). The values come from the compiled
-# GitHoney scripts; the committed files hold placeholders — replace them with
-# the real script bytes/ids before deploying.
-
-[profile.local]
-env_file = ".env.local"
-
-[profile.preview]
-env_file = ".env.preview"
+# Per-network profiles. Each loads `.env.<profile>` to populate main.tx3's
+# `env { ... }` block — the compiled GitHoney contract suite for that network.
+# Only `preprod` is configured, from the live GitHoney deployment; add a profile
+# per network as new contract suites are deployed.
 
 [profile.preprod]
 env_file = ".env.preprod"
-
-[profile.mainnet]
-env_file = ".env.mainnet"

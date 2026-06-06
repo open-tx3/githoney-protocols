@@ -11,21 +11,10 @@ repository = "https://github.com/open-tx3/githoney-protocols"
 [ledger]
 family = "cardano"
 
-# Per-network profiles. Each loads `.env.<profile>` to populate the
-# network-level `env { ... }` block in main.tx3 (the badge validator and
-# minting scripts plus the published GitHoney settings UTxO that badge spends
-# reference). The values come from a deployed GitHoney `config.json`; the
-# committed files hold placeholders — replace them before invoking against a
-# real network.
-
-[profile.local]
-env_file = ".env.local"
-
-[profile.preview]
-env_file = ".env.preview"
+# Per-network profiles. Each loads `.env.<profile>` to populate main.tx3's
+# `env { ... }` block (settings_ref plus the badge validator/minting scripts and
+# policy id). Only `preprod` is configured, from the live GitHoney deployment;
+# add a profile per network as new environments are deployed.
 
 [profile.preprod]
 env_file = ".env.preprod"
-
-[profile.mainnet]
-env_file = ".env.mainnet"
