@@ -16,12 +16,48 @@ party GitHoneyAddr;
 /// Third party that tops up an existing bounty's reward via `add_bounty_rewards`.
 party Sponsor;
 
-/// Wallet that holds the circulating fungible badge tokens.
-party FTAddress;
-/// Badge validator address that holds each badge's CIP-68 reference NFT (metadata).
-party ScriptBadge;
-/// Recipient of a fungible badge token transferred by `pay_badges_to`.
-party PayAddress;
+// ------------------------------------------------------------------
+// Environment
+// ------------------------------------------------------------------
+// Per-network deployment configuration: the published validator/minting
+// scripts, the settings control token and its reference UTxO, the GitHoney
+// admin credential, and the current fee schedule. Loaded from the active
+// profile's `.env.<profile>` file. Per-call values (bounty id, reward asset,
+// maintainer/contributor keys, validity window, min-ADA) stay tx parameters.
+env {
+    /// GitHoney spend validator bytes (settings + bounty logic), published as a reference script.
+    githoney_script: Bytes,
+    /// Plutus version of the GitHoney spend validator.
+    githoney_script_version: Int,
+
+    /// Settings spend validator bytes that witness settings spends.
+    settings_validator_script: Bytes,
+    /// Plutus version of the settings spend validator.
+    settings_validator_version: Int,
+
+    /// Settings minting-policy bytes that mint/burn the settings control token.
+    settings_minting_policy: Bytes,
+    /// Plutus version of the settings minting policy.
+    settings_minting_version: Int,
+    /// Policy id of the settings control token.
+    settings_policy_id: Bytes,
+    /// Asset name of the settings control token.
+    settings_token_name: Bytes,
+
+    /// Published settings UTxO, referenced by every bounty transaction.
+    settings_ref: UtxoRef,
+
+    /// Admin payment credential (vkey hash) recorded in every bounty datum.
+    admin_payment_key: Bytes,
+
+    /// Flat lovelace fee charged on every new bounty (mirrors the settings datum).
+    bounty_creation_fee: Int,
+    /// Reward-fee cut GitHoney takes on merge (mirrors the settings datum).
+    bounty_rewards_fee: Int,
+
+    /// Minting policy id of the bounty NFT.
+    bounty_policy_id: Bytes,
+}
 
 // ------------------------------------------------------------------
 // Types
@@ -104,244 +140,6 @@ type GithoneyDatum {
     initial_value: Map<Bytes, Map<Bytes, Int>>,
 }
 
-// CIP-68 reference datum of a badge: on-chain metadata map and version.
-type BadgesDatum {
-    metadata: Map<Bytes, Bytes>,
-    version: Int,
-}
-// ==================================================================
-// Badges
-// ==================================================================
-
-/// Mint a CIP-68 badge pair: the reference NFT (carrying metadata) to the
-/// badge script, and the fungible badge tokens to the FT-holding wallet.
-tx mint_badge(
-    /// Metadata key bytes for the "description" entry.
-    description: Bytes,
-    /// Metadata value stored under the "description" key.
-    description_value: Bytes,
-    /// Number of fungible badge tokens to mint.
-    ft_badge_amount: Int,
-    /// Asset name of the fungible badge token.
-    ft_badge_name: Bytes,
-    /// Metadata key bytes for the "logo" entry.
-    logo: Bytes,
-    /// Metadata value stored under the "logo" key.
-    logo_value: Bytes,
-    /// Badge metadata version written into the `BadgesDatum`.
-    m_version: Int,
-    /// Policy id under which both the reference NFT and the fungible tokens are minted.
-    minting_policy_id: Bytes,
-    /// Metadata key bytes for the "name" entry.
-    name: Bytes,
-    /// Metadata value stored under the "name" key.
-    name_value: Bytes,
-    /// Plutus minting-policy script bytes for the badge.
-    badge_policy_script: Bytes,
-    /// Plutus version of the badge minting-policy script.
-    badge_policy_script_version: Int,
-    /// Asset name of the CIP-68 reference NFT.
-    ref_nft_asset_name: Bytes,
-    /// GitHoney wallet UTxO consumed to fund and back the mint.
-    utxo_ref: UtxoRef,
-) {
-    collateral {
-        from: GitHoneyAddr,
-        min_amount: Ada(20000000),
-    }
-
-    input githoney_wallet {
-        ref: utxo_ref,
-    }
-
-    mint {
-        amount: AnyAsset(minting_policy_id, ref_nft_asset_name, 1) + AnyAsset(minting_policy_id, ft_badge_name, ft_badge_amount),
-        redeemer: (),
-    }
-
-    output badge_utxo {
-        to: ScriptBadge,
-        amount: min_utxo(badge_utxo) + AnyAsset(minting_policy_id, ref_nft_asset_name, 1),
-        datum: BadgesDatum {
-            metadata: {
-                name: name_value,
-                logo: logo_value,
-                description: description_value,
-            },
-            version: m_version,
-        },
-    }
-
-    output ft_output {
-        to: FTAddress,
-        amount: AnyAsset(minting_policy_id, ft_badge_name, ft_badge_amount) + min_utxo(ft_output),
-    }
-
-    output change {
-        to: GitHoneyAddr,
-        amount: githoney_wallet - fees - min_utxo(ft_output) - min_utxo(badge_utxo),
-    }
-
-    cardano::plutus_witness {
-        version: badge_policy_script_version,
-        script: badge_policy_script,
-    }
-
-    metadata {
-        674: "Githoney: Mint badges",
-    }
-}
-
-/// Rewrite a badge's on-chain metadata datum, keeping the reference NFT in place.
-tx update_badge(
-    /// Plutus validator script bytes for the badge script.
-    badges_script: Bytes,
-    /// Plutus version of the badge validator script.
-    badges_script_version: Int,
-    /// Metadata key bytes for the "description" entry.
-    description: Bytes,
-    /// New metadata value for the "description" key.
-    description_value: Bytes,
-    /// Metadata key bytes for the "logo" entry.
-    logo: Bytes,
-    /// New metadata value for the "logo" key.
-    logo_value: Bytes,
-    /// Updated badge metadata version.
-    m_version: Int,
-    /// Metadata key bytes for the "name" entry.
-    name: Bytes,
-    /// New metadata value for the "name" key.
-    name_value: Bytes,
-    /// Settings UTxO referenced for protocol context.
-    settings_ref: UtxoRef,
-    /// The badge reference-NFT UTxO whose metadata is being updated.
-    badge_utxo_ref: UtxoRef,
-) {
-    collateral {
-        from: GitHoneyAddr,
-        min_amount: Ada(20000000),
-    }
-
-    input githoney_wallet {
-        from: GitHoneyAddr,
-        min_amount: Ada(2000000),
-    }
-
-    reference settings_utxo {
-        ref: settings_ref,
-    }
-
-    input current {
-        ref: badge_utxo_ref,
-        redeemer: (),
-    }
-
-    output badge_utxo {
-        to: ScriptBadge,
-        amount: current,
-        datum: BadgesDatum {
-            metadata: {
-                name: name_value,
-                logo: logo_value,
-                description: description_value,
-            },
-            version: m_version,
-        },
-    }
-
-    output change {
-        to: GitHoneyAddr,
-        amount: githoney_wallet - fees,
-    }
-
-
-    signers {
-        GitHoneyAddr,
-    }
-
-    cardano::plutus_witness {
-        version: badges_script_version,
-        script: badges_script,
-    }
-
-    metadata {
-        674: "Githoney: Update badges",
-    }
-}
-
-/// Transfer a single fungible badge token from the FT-holding wallet to a recipient.
-tx pay_badges_to(
-    /// Asset name of the badge token to transfer.
-    badge_name: Bytes,
-    /// Policy id of the badge token to transfer.
-    badge_policy: Bytes
-) {
-    input badges {
-        from: FTAddress,
-        min_amount: AnyAsset(badge_policy, badge_name, 1),
-    }
-
-    input gas {
-        from: FTAddress,
-        min_amount: fees + min_utxo(payment) + min_utxo(change),
-    }
-
-    output payment {
-        to: PayAddress,
-        amount: AnyAsset(badge_policy, badge_name, 1) + min_utxo(payment),
-    }
-
-    output change {
-        to: FTAddress,
-        amount: gas + badges - fees - min_utxo(payment) - AnyAsset(badge_policy, badge_name, 1),
-    }
-}
-
-/// Reclaim a UTxO sitting at the badge script back into the GitHoney wallet.
-tx collect_badge_utxos(
-    /// Plutus validator script bytes for the badge script.
-    badges_script: Bytes,
-    /// Plutus version of the badge validator script.
-    badges_script_version: Int,
-    /// Settings UTxO referenced for protocol context.
-    settings_ref: UtxoRef,
-    /// The badge-script UTxO to collect.
-    utxo_to_collect: UtxoRef,
-) {
-    collateral {
-        from: GitHoneyAddr,
-        min_amount: Ada(5000000),
-    }
-
-    reference settings_utxo {
-        ref: settings_ref,
-    }
-
-    input current {
-        ref: utxo_to_collect,
-        redeemer: (),
-    }
-
-    input githoney_wallet {
-        from: GitHoneyAddr,
-        min_amount: fees,
-    }
-
-    output change {
-        to: GitHoneyAddr,
-        amount: githoney_wallet + current - fees,
-    }
-
-    signers {
-        GitHoneyAddr,
-    }
-
-    cardano::plutus_witness {
-        version: badges_script_version,
-        script: badges_script,
-    }
-}
-
 // ==================================================================
 // Settings
 // ==================================================================
@@ -356,18 +154,6 @@ tx deploy_settings(
     githoney_payment_credential: Bytes,
     /// GitHoney fee-collection staking credential (vkey hash).
     githoney_staking_credential: Bytes,
-    /// Plutus settings-validator script bytes (published as a reference script).
-    githoney_script: Bytes,
-    /// Plutus version of the settings-validator script.
-    script_version: Int,
-    /// Plutus version of the settings minting policy.
-    settings_minting_version: Int,
-    /// Plutus settings minting-policy script bytes.
-    settings_minting_policy: Bytes,
-    /// Policy id of the settings NFT.
-    settings_policy_id: Bytes,
-    /// Asset name of the settings NFT.
-    settings_token_name: Bytes,
     /// One-shot wallet UTxO consumed to make the settings mint unique.
     utxo_ref: UtxoRef,
 ) {
@@ -409,7 +195,7 @@ tx deploy_settings(
             bounty_creation_fee: creation_fee,
             bounty_reward_fee: reward_fee,
         },
-        version: script_version,
+        version: githoney_script_version,
         script: githoney_script,
     }
 
@@ -431,25 +217,13 @@ tx deploy_settings(
 /// Rewrite the settings datum with a new GitHoney address and/or fee schedule.
 tx update_settings(
     /// New flat lovelace fee charged on every new bounty.
-    bounty_create_fee: Int,
+    new_creation_fee: Int,
     /// New reward-fee cut GitHoney takes on merge.
-    bounty_rewards_fee: Int,
+    new_reward_fee: Int,
     /// New GitHoney fee-collection payment credential (vkey hash).
     githoney_payment_key: Bytes,
     /// New GitHoney fee-collection staking credential (vkey hash).
     githoney_staking_key: Bytes,
-    /// Plutus settings-validator script bytes (re-published as a reference script).
-    githoney_script: Bytes,
-    /// Plutus version of the settings-validator script.
-    script_version: Int,
-    /// Policy id of the settings NFT.
-    settings_policy_id: Bytes,
-    /// Asset name of the settings NFT.
-    settings_token_name: Bytes,
-    /// Plutus settings-validator script bytes used to witness the spend.
-    settings_validator_script: Bytes,
-    /// Plutus version of the settings-validator witness script.
-    settings_validator_version: Int,
 ) {
     collateral {
         from: GitHoneyAddr,
@@ -484,10 +258,10 @@ tx update_settings(
                     },
                 },
             },
-            bounty_creation_fee: bounty_create_fee,
-            bounty_reward_fee: bounty_rewards_fee,
+            bounty_creation_fee: new_creation_fee,
+            bounty_reward_fee: new_reward_fee,
         },
-        version: script_version,
+        version: githoney_script_version,
         script: githoney_script,
     }
 
@@ -514,18 +288,6 @@ tx close_settings(
     githoney_staking_credential: Bytes,
     /// Lovelace held in the settings UTxO, returned to GitHoney.
     remaining_ada: Int,
-    /// Plutus settings minting-policy script bytes (used to burn the NFT).
-    settings_minting_policy: Bytes,
-    /// Plutus version of the settings minting policy.
-    settings_minting_version: Int,
-    /// Policy id of the settings NFT.
-    settings_policy_id: Bytes,
-    /// Asset name of the settings NFT.
-    settings_token_name: Bytes,
-    /// Plutus settings-validator script bytes used to witness the spend.
-    settings_validator_script: Bytes,
-    /// Plutus version of the settings-validator witness script.
-    settings_validator_version: Int,
 ) {
     collateral {
         from: GitHoneyAddr,
@@ -577,16 +339,8 @@ tx close_settings(
 /// Create a bounty whose reward is a native token, minting the bounty NFT and
 /// paying the creation fee to GitHoney.
 tx create_bounty_with_token(
-    /// Admin payment credential (vkey hash) written into the bounty datum.
-    admin_payment_key: Bytes,
-    // Since the settingsutxo datum cannot be accessed,
-    // they are passed as parameters.
-    /// Flat creation fee, mirrored from the settings datum.
-    bounty_creation_fee: Int,
     /// Asset name of the bounty NFT to mint.
     bounty_id: Bytes,
-    /// Reward-fee cut recorded in the bounty datum, mirrored from the settings datum.
-    bounty_rewards_fee: Int,
     /// Maintainer payment credential (vkey hash).
     maintainer_payment_key: Bytes,
     /// Maintainer staking credential (vkey hash).
@@ -594,16 +348,12 @@ tx create_bounty_with_token(
     /// Min-UTxO lovelace floor for the bounty output.
     min_ada: Int,
     // NOTE - Since you cannot iterate over lists, we use a fixed asset.
-    /// Policy id under which the bounty NFT is minted.
-    minting_policy_id: Bytes,
     /// Amount of the reward token to lock.
     reward_amount: Int,
     /// Asset name of the reward token.
     reward_asset_name: Bytes,
     /// Policy id of the reward token.
     reward_policy_id: Bytes,
-    /// Settings UTxO referenced for protocol context.
-    settings_ref: UtxoRef,
     /// Validity-window lower bound (slot).
     since: Int,
     /// Bounty deadline written into the datum.
@@ -626,13 +376,13 @@ tx create_bounty_with_token(
     }
 
     mint {
-        amount: AnyAsset(minting_policy_id, bounty_id, 1),
+        amount: AnyAsset(bounty_policy_id, bounty_id, 1),
         redeemer: (),
     }
 
     output bounty_utxo {
         to: Script,
-        amount: Ada(min_ada) + AnyAsset(minting_policy_id, bounty_id, 1) + AnyAsset(reward_policy_id, reward_asset_name, reward_amount),
+        amount: Ada(min_ada) + AnyAsset(bounty_policy_id, bounty_id, 1) + AnyAsset(reward_policy_id, reward_asset_name, reward_amount),
         datum: GithoneyDatum {
             admin_payment_credential: CardanoCredential::VerificationKey {
                 VerificationKey: admin_payment_key,
@@ -683,26 +433,16 @@ tx create_bounty_with_token(
 /// Create a bounty whose reward is ADA, minting the bounty NFT and paying the
 /// creation fee to GitHoney.
 tx create_bounty_with_lovelace(
-    /// Admin payment credential (vkey hash) written into the bounty datum.
-    admin_payment_key: Bytes,
-    /// Flat creation fee, mirrored from the settings datum.
-    bounty_creation_fee: Int,
     /// Asset name of the bounty NFT to mint.
     bounty_id: Bytes,
-    /// Reward-fee cut recorded in the bounty datum, mirrored from the settings datum.
-    bounty_rewards_fee: Int,
     /// Maintainer payment credential (vkey hash).
     maintainer_payment_key: Bytes,
     /// Maintainer staking credential (vkey hash).
     maintainer_stake_key: Bytes,
     /// Min-UTxO lovelace floor for the bounty output.
     min_ada: Int,
-    /// Policy id under which the bounty NFT is minted.
-    minting_policy_id: Bytes,
     /// Lovelace reward amount to lock.
     reward_amount: Int,
-    /// Settings UTxO referenced for protocol context.
-    settings_ref: UtxoRef,
     /// Validity-window lower bound (slot).
     since: Int,
     /// Bounty deadline written into the datum.
@@ -725,13 +465,13 @@ tx create_bounty_with_lovelace(
     }
 
     mint {
-        amount: AnyAsset(minting_policy_id, bounty_id, 1),
+        amount: AnyAsset(bounty_policy_id, bounty_id, 1),
         redeemer: (),
     }
 
     output bounty_utxo {
         to: Script,
-        amount: Ada(min_ada + reward_amount) + AnyAsset(minting_policy_id, bounty_id, 1),
+        amount: Ada(min_ada + reward_amount) + AnyAsset(bounty_policy_id, bounty_id, 1),
         datum: GithoneyDatum {
             admin_payment_credential: CardanoCredential::VerificationKey {
                 VerificationKey: admin_payment_key,
@@ -792,8 +532,6 @@ tx add_bounty_rewards(
     reward_asset_name: Bytes,
     /// Policy id of the reward token.
     reward_policy_id: Bytes,
-    /// Settings UTxO referenced for protocol context.
-    settings_ref: UtxoRef,
     /// Updated `initial_value` lovelace entry for the bounty datum.
     initial_rewards: Int,
     /// Validity-window lower bound (slot).
@@ -867,8 +605,6 @@ tx assign_bounty(
     min_ada: Int,
     /// Updated `initial_value` lovelace entry for the bounty datum.
     initial_funds: Int,
-    /// Settings UTxO referenced for protocol context.
-    settings_ref: UtxoRef,
     /// Validity-window lower bound (slot).
     since: Int,
     /// Validity-window upper bound (slot).
@@ -953,8 +689,6 @@ tx assign_bug_bounty(
     min_ada: Int,
     /// Updated `initial_value` lovelace entry for the bounty datum.
     initial_funds: Int,
-    /// Settings UTxO referenced for protocol context.
-    settings_ref: UtxoRef,
     /// Validity-window lower bound (slot).
     since: Int,
     /// Validity-window upper bound (slot).
@@ -1034,16 +768,12 @@ tx close_bounty_unassigned(
     bounty_ref: UtxoRef,
     /// Min-UTxO lovelace returned to the maintainer.
     min_ada: Int,
-    /// Policy id of the bounty NFT.
-    minting_policy_id: Bytes,
     /// Amount of reward refunded to the maintainer.
     reward_amount: Int,
     /// Asset name of the reward token.
     reward_asset_name: Bytes,
     /// Policy id of the reward token.
     reward_policy_id: Bytes,
-    /// Settings UTxO referenced for protocol context.
-    settings_ref: UtxoRef,
     /// Validity-window lower bound (slot).
     since: Int,
     /// Bounty deadline (validated against the validity window).
@@ -1072,7 +802,7 @@ tx close_bounty_unassigned(
     }
 
     mint {
-        amount: AnyAsset(minting_policy_id, bounty_id, -1),
+        amount: AnyAsset(bounty_policy_id, bounty_id, -1),
         redeemer: (),
     }
 
@@ -1109,16 +839,12 @@ tx close_bounty_unassigned_sponsored(
     bounty_ref: UtxoRef,
     /// Min-UTxO lovelace returned to the maintainer.
     min_ada: Int,
-    /// Policy id of the bounty NFT.
-    minting_policy_id: Bytes,
     /// Amount of reward refunded to the maintainer.
     reward_amount: Int,
     /// Asset name of the reward token.
     reward_asset_name: Bytes,
     /// Policy id of the reward token.
     reward_policy_id: Bytes,
-    /// Settings UTxO referenced for protocol context.
-    settings_ref: UtxoRef,
     /// Validity-window lower bound (slot).
     since: Int,
     /// Amount of sponsor tokens refunded to the sponsor.
@@ -1153,7 +879,7 @@ tx close_bounty_unassigned_sponsored(
     }
 
     mint {
-        amount: AnyAsset(minting_policy_id, bounty_id, -1),
+        amount: AnyAsset(bounty_policy_id, bounty_id, -1),
         redeemer: (),
     }
 
@@ -1195,16 +921,12 @@ tx close_bounty_assigned(
     bounty_ref: UtxoRef,
     /// Min-UTxO lovelace returned to both maintainer and contributor.
     min_ada: Int,
-    /// Policy id of the bounty NFT.
-    minting_policy_id: Bytes,
     /// Amount of reward refunded to the maintainer.
     reward_amount: Int,
     /// Asset name of the reward token.
     reward_asset_name: Bytes,
     /// Policy id of the reward token.
     reward_policy_id: Bytes,
-    /// Settings UTxO referenced for protocol context.
-    settings_ref: UtxoRef,
     /// Validity-window lower bound (slot).
     since: Int,
     /// Bounty deadline (validated against the validity window).
@@ -1234,7 +956,7 @@ tx close_bounty_assigned(
     }
 
     mint {
-        amount: AnyAsset(minting_policy_id, bounty_id, -1),
+        amount: AnyAsset(bounty_policy_id, bounty_id, -1),
         redeemer: (),
     }
 
@@ -1277,16 +999,12 @@ tx close_bounty_assigned_sponsored(
     bounty_ref: UtxoRef,
     /// Min-UTxO lovelace returned to both maintainer and contributor.
     min_ada: Int,
-    /// Policy id of the bounty NFT.
-    minting_policy_id: Bytes,
     /// Amount of reward refunded to the maintainer.
     reward_amount: Int,
     /// Asset name of the reward token.
     reward_asset_name: Bytes,
     /// Policy id of the reward token.
     reward_policy_id: Bytes,
-    /// Settings UTxO referenced for protocol context.
-    settings_ref: UtxoRef,
     /// Validity-window lower bound (slot).
     since: Int,
     /// Amount of sponsor tokens refunded to the sponsor.
@@ -1321,7 +1039,7 @@ tx close_bounty_assigned_sponsored(
     }
 
     mint {
-        amount: AnyAsset(minting_policy_id, bounty_id, -1),
+        amount: AnyAsset(bounty_policy_id, bounty_id, -1),
         redeemer: (),
     }
 
@@ -1376,8 +1094,6 @@ tx merge_bounty(
     script_fee: Int,
     /// Updated `initial_value` lovelace entry for the bounty datum.
     initial_funds: Int,
-    /// Settings UTxO referenced for protocol context.
-    settings_ref: UtxoRef,
     /// Validity-window lower bound (slot).
     since: Int,
     /// Validity-window upper bound (slot).
@@ -1460,10 +1176,6 @@ tx claim_bounty(
     bounty_ref: UtxoRef,
     /// Min-UTxO lovelace floor (unused in the body; kept for ABI stability).
     min_ada: Int,
-    /// Policy id of the bounty NFT.
-    minting_policy_id: Bytes,
-    /// Settings UTxO referenced for protocol context.
-    settings_ref: UtxoRef,
     /// Validity-window lower bound (slot).
     since: Int,
     /// Validity-window upper bound (slot).
@@ -1490,13 +1202,13 @@ tx claim_bounty(
     }
 
     mint {
-        amount: AnyAsset(minting_policy_id, bounty_id, -1),
+        amount: AnyAsset(bounty_policy_id, bounty_id, -1),
         redeemer: (),
     }
 
     output contributor_output {
         to: Contributor,
-        amount: contributor_input + current - AnyAsset(minting_policy_id, bounty_id, 1) - fees,
+        amount: contributor_input + current - AnyAsset(bounty_policy_id, bounty_id, 1) - fees,
     }
 
     validity {

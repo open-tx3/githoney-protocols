@@ -1,0 +1,261 @@
+// ------------------------------------------------------------------
+// Parties
+// ------------------------------------------------------------------
+
+/// GitHoney operator wallet that mints, updates, and reclaims badges.
+party GitHoneyAddr;
+/// Badge validator address that holds each badge's CIP-68 reference NFT (metadata).
+party ScriptBadge;
+/// Wallet that holds the circulating fungible badge tokens.
+party FTAddress;
+/// Recipient of a fungible badge token transferred by `pay_badges_to`.
+party PayAddress;
+
+// ------------------------------------------------------------------
+// Environment
+// ------------------------------------------------------------------
+// Per-network deployment configuration: the badge validator and minting
+// scripts, and the published GitHoney settings UTxO that badge spends
+// reference for authorization. Loaded from the active profile's
+// `.env.<profile>` file. The settings UTxO is the same one published by the
+// companion `githoney-bounties` protocol's `deploy_settings`.
+env {
+    /// Published GitHoney settings UTxO, referenced by badge spends for protocol authorization.
+    settings_ref: UtxoRef,
+
+    /// Badge spend validator bytes.
+    badges_script: Bytes,
+    /// Plutus version of the badge spend validator.
+    badges_script_version: Int,
+    /// Badge minting-policy bytes.
+    badge_policy_script: Bytes,
+    /// Plutus version of the badge minting policy.
+    badge_policy_script_version: Int,
+    /// Minting policy id of the badge tokens.
+    badge_policy_id: Bytes,
+}
+
+// ------------------------------------------------------------------
+// Types
+// ------------------------------------------------------------------
+
+// CIP-68 reference datum of a badge: on-chain metadata map and version.
+type BadgesDatum {
+    metadata: Map<Bytes, Bytes>,
+    version: Int,
+}
+
+// ==================================================================
+// Badges
+// ==================================================================
+
+/// Mint a CIP-68 badge pair: the reference NFT (carrying metadata) to the
+/// badge script, and the fungible badge tokens to the FT-holding wallet.
+tx mint_badge(
+    /// Metadata key bytes for the "description" entry.
+    description: Bytes,
+    /// Metadata value stored under the "description" key.
+    description_value: Bytes,
+    /// Number of fungible badge tokens to mint.
+    ft_badge_amount: Int,
+    /// Asset name of the fungible badge token.
+    ft_badge_name: Bytes,
+    /// Metadata key bytes for the "logo" entry.
+    logo: Bytes,
+    /// Metadata value stored under the "logo" key.
+    logo_value: Bytes,
+    /// Badge metadata version written into the `BadgesDatum`.
+    m_version: Int,
+    /// Metadata key bytes for the "name" entry.
+    name: Bytes,
+    /// Metadata value stored under the "name" key.
+    name_value: Bytes,
+    /// Asset name of the CIP-68 reference NFT.
+    ref_nft_asset_name: Bytes,
+    /// GitHoney wallet UTxO consumed to fund and back the mint.
+    utxo_ref: UtxoRef,
+) {
+    collateral {
+        from: GitHoneyAddr,
+        min_amount: Ada(20000000),
+    }
+
+    input githoney_wallet {
+        ref: utxo_ref,
+    }
+
+    mint {
+        amount: AnyAsset(badge_policy_id, ref_nft_asset_name, 1) + AnyAsset(badge_policy_id, ft_badge_name, ft_badge_amount),
+        redeemer: (),
+    }
+
+    output badge_utxo {
+        to: ScriptBadge,
+        amount: min_utxo(badge_utxo) + AnyAsset(badge_policy_id, ref_nft_asset_name, 1),
+        datum: BadgesDatum {
+            metadata: {
+                name: name_value,
+                logo: logo_value,
+                description: description_value,
+            },
+            version: m_version,
+        },
+    }
+
+    output ft_output {
+        to: FTAddress,
+        amount: AnyAsset(badge_policy_id, ft_badge_name, ft_badge_amount) + min_utxo(ft_output),
+    }
+
+    output change {
+        to: GitHoneyAddr,
+        amount: githoney_wallet - fees - min_utxo(ft_output) - min_utxo(badge_utxo),
+    }
+
+    cardano::plutus_witness {
+        version: badge_policy_script_version,
+        script: badge_policy_script,
+    }
+
+    metadata {
+        674: "Githoney: Mint badges",
+    }
+}
+
+/// Rewrite a badge's on-chain metadata datum, keeping the reference NFT in place.
+tx update_badge(
+    /// Metadata key bytes for the "description" entry.
+    description: Bytes,
+    /// New metadata value for the "description" key.
+    description_value: Bytes,
+    /// Metadata key bytes for the "logo" entry.
+    logo: Bytes,
+    /// New metadata value for the "logo" key.
+    logo_value: Bytes,
+    /// Updated badge metadata version.
+    m_version: Int,
+    /// Metadata key bytes for the "name" entry.
+    name: Bytes,
+    /// New metadata value for the "name" key.
+    name_value: Bytes,
+    /// The badge reference-NFT UTxO whose metadata is being updated.
+    badge_utxo_ref: UtxoRef,
+) {
+    collateral {
+        from: GitHoneyAddr,
+        min_amount: Ada(20000000),
+    }
+
+    input githoney_wallet {
+        from: GitHoneyAddr,
+        min_amount: Ada(2000000),
+    }
+
+    reference settings_utxo {
+        ref: settings_ref,
+    }
+
+    input current {
+        ref: badge_utxo_ref,
+        redeemer: (),
+    }
+
+    output badge_utxo {
+        to: ScriptBadge,
+        amount: current,
+        datum: BadgesDatum {
+            metadata: {
+                name: name_value,
+                logo: logo_value,
+                description: description_value,
+            },
+            version: m_version,
+        },
+    }
+
+    output change {
+        to: GitHoneyAddr,
+        amount: githoney_wallet - fees,
+    }
+
+
+    signers {
+        GitHoneyAddr,
+    }
+
+    cardano::plutus_witness {
+        version: badges_script_version,
+        script: badges_script,
+    }
+
+    metadata {
+        674: "Githoney: Update badges",
+    }
+}
+
+/// Transfer a single fungible badge token from the FT-holding wallet to a recipient.
+tx pay_badges_to(
+    /// Asset name of the badge token to transfer.
+    badge_name: Bytes,
+    /// Policy id of the badge token to transfer.
+    badge_policy: Bytes
+) {
+    input badges {
+        from: FTAddress,
+        min_amount: AnyAsset(badge_policy, badge_name, 1),
+    }
+
+    input gas {
+        from: FTAddress,
+        min_amount: fees + min_utxo(payment) + min_utxo(change),
+    }
+
+    output payment {
+        to: PayAddress,
+        amount: AnyAsset(badge_policy, badge_name, 1) + min_utxo(payment),
+    }
+
+    output change {
+        to: FTAddress,
+        amount: gas + badges - fees - min_utxo(payment) - AnyAsset(badge_policy, badge_name, 1),
+    }
+}
+
+/// Reclaim a UTxO sitting at the badge script back into the GitHoney wallet.
+tx collect_badge_utxos(
+    /// The badge-script UTxO to collect.
+    utxo_to_collect: UtxoRef,
+) {
+    collateral {
+        from: GitHoneyAddr,
+        min_amount: Ada(5000000),
+    }
+
+    reference settings_utxo {
+        ref: settings_ref,
+    }
+
+    input current {
+        ref: utxo_to_collect,
+        redeemer: (),
+    }
+
+    input githoney_wallet {
+        from: GitHoneyAddr,
+        min_amount: fees,
+    }
+
+    output change {
+        to: GitHoneyAddr,
+        amount: githoney_wallet + current - fees,
+    }
+
+    signers {
+        GitHoneyAddr,
+    }
+
+    cardano::plutus_witness {
+        version: badges_script_version,
+        script: badges_script,
+    }
+}
