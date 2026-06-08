@@ -19,8 +19,17 @@ env {
     /// Admin payment credential (vkey hash) recorded in every bounty datum.
     admin_payment_key: Bytes,
 
-    /// Minting policy id of the bounty NFT.
+    /// Minting policy id of the bounty NFT (the GitHoney validator hash).
     bounty_policy_id: Bytes,
+}
+
+// The GitHoney multi-purpose Plutus script: the bounty spend validator and the
+// bounty-NFT minting policy share this hash, published as a reference script at
+// `settings_ref`. Minting or burning under it attaches that UTxO as a reference
+// input, so the script is available without a separate `reference` block.
+policy Bounty {
+    hash: bounty_policy_id,
+    ref: settings_ref,
 }
 
 // A full Cardano address: payment credential plus optional staking credential.
@@ -158,13 +167,13 @@ tx create_bounty_with_token(
     }
 
     mint {
-        amount: AnyAsset(bounty_policy_id, bounty_id, 1),
+        amount: AnyAsset(Bounty, bounty_id, 1),
         redeemer: (),
     }
 
     output new_bounty {
         to: Vault,
-        amount: Ada(min_ada) + AnyAsset(bounty_policy_id, bounty_id, 1) + AnyAsset(reward_policy_id, reward_asset_name, reward_amount),
+        amount: Ada(min_ada) + AnyAsset(Bounty, bounty_id, 1) + AnyAsset(reward_policy_id, reward_asset_name, reward_amount),
         datum: BountyDatum {
             admin_payment_credential: vkey_credential(admin_payment_key),
             maintainer_address:  vkey_address(maintainer_payment_key, maintainer_stake_key),
@@ -235,13 +244,13 @@ tx create_bounty_with_lovelace(
     }
 
     mint {
-        amount: AnyAsset(bounty_policy_id, bounty_id, 1),
+        amount: AnyAsset(Bounty, bounty_id, 1),
         redeemer: (),
     }
 
     output new_bounty {
         to: Vault,
-        amount: Ada(min_ada + reward_amount) + AnyAsset(bounty_policy_id, bounty_id, 1),
+        amount: Ada(min_ada + reward_amount) + AnyAsset(Bounty, bounty_id, 1),
         datum: BountyDatum {
             admin_payment_credential: vkey_credential(admin_payment_key),
             maintainer_address: vkey_address(maintainer_payment_key, maintainer_stake_key),
@@ -519,11 +528,6 @@ tx close_bounty_unassigned(
     /// Validity-window upper bound (slot).
     until: Int,
 ) {
-    reference settings {
-        ref: settings_ref,
-        datum_is: SettingsDatum,
-    }
-
     collateral {
         from: Admin,
         min_amount: Ada(5000000),
@@ -541,7 +545,7 @@ tx close_bounty_unassigned(
     }
 
     mint {
-        amount: AnyAsset(bounty_policy_id, bounty_id, -1),
+        amount: AnyAsset(Bounty, bounty_id, -1),
         redeemer: (),
     }
 
@@ -597,11 +601,6 @@ tx close_bounty_unassigned_sponsored(
     /// Validity-window upper bound (slot).
     until: Int,
 ) {
-    reference settings {
-        ref: settings_ref,
-        datum_is: SettingsDatum,
-    }
-
     collateral {
         from: Admin,
         min_amount: Ada(5000000),
@@ -619,7 +618,7 @@ tx close_bounty_unassigned_sponsored(
     }
 
     mint {
-        amount: AnyAsset(bounty_policy_id, bounty_id, -1),
+        amount: AnyAsset(Bounty, bounty_id, -1),
         redeemer: (),
     }
 
@@ -675,11 +674,6 @@ tx close_bounty_assigned(
     until: Int,
 
 ) {
-    reference settings {
-        ref: settings_ref,
-        datum_is: SettingsDatum,
-    }
-
     collateral {
         from: Admin,
         min_amount: Ada(5000000),
@@ -697,7 +691,7 @@ tx close_bounty_assigned(
     }
 
     mint {
-        amount: AnyAsset(bounty_policy_id, bounty_id, -1),
+        amount: AnyAsset(Bounty, bounty_id, -1),
         redeemer: (),
     }
 
@@ -759,11 +753,6 @@ tx close_bounty_assigned_sponsored(
     /// Validity-window upper bound (slot).
     until: Int,
 ) {
-    reference settings {
-        ref: settings_ref,
-        datum_is: SettingsDatum,
-    }
-
     collateral {
         from: Admin,
         min_amount: Ada(5000000),
@@ -781,7 +770,7 @@ tx close_bounty_assigned_sponsored(
     }
 
     mint {
-        amount: AnyAsset(bounty_policy_id, bounty_id, -1),
+        amount: AnyAsset(Bounty, bounty_id, -1),
         redeemer: (),
     }
 
@@ -924,11 +913,6 @@ tx claim_bounty(
     /// Validity-window upper bound (slot).
     until: Int,
 ) {
-    reference settings {
-        ref: settings_ref,
-        datum_is: SettingsDatum,
-    }
-
     collateral {
         from: Contributor,
         min_amount: Ada(5000000),
@@ -946,13 +930,13 @@ tx claim_bounty(
     }
 
     mint {
-        amount: AnyAsset(bounty_policy_id, bounty_id, -1),
+        amount: AnyAsset(Bounty, bounty_id, -1),
         redeemer: (),
     }
 
     output reward {
         to: Contributor,
-        amount: funds + bounty - AnyAsset(bounty_policy_id, bounty_id, 1) - fees,
+        amount: funds + bounty - AnyAsset(Bounty, bounty_id, 1) - fees,
     }
 
     validity {
