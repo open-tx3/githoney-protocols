@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    name: ${{ matrix.protocol }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        protocol: [githoney-bounties, githoney-badges, githoney-setup]
+    defaults:
+      run:
+        working-directory: ${{ matrix.protocol }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: tx3-lang/actions/setup@v1
+      - run: trix check
+      - run: trix build
